@@ -6,7 +6,7 @@ from collections.abc import Sequence
 import numpy as np
 
 from robojudo.controller import Controller, ctrl_registry
-from robojudo.controller.ctrl_cfgs import BeyondMimicCtrlCfg
+from robojudo.controller.ctrl_cfgs import BeyondMimicCtrlCfg, BeyondMimicMotionTrackingCtrlCfg
 from robojudo.environment import Environment
 from robojudo.utils.progress import ProgressBar
 from robojudo.utils.rotation import TransformAlignment
@@ -47,21 +47,21 @@ class MotionLoader:
 
 
 @ctrl_registry.register
-class BeyondMimicCtrl(Controller):
-    cfg_ctrl: BeyondMimicCtrlCfg
+class BeyondMimicMotionTrackingCtrl(Controller):
+    cfg_ctrl: BeyondMimicMotionTrackingCtrlCfg
     env: Environment
 
-    def __init__(self, cfg_ctrl: BeyondMimicCtrlCfg, env, device="cpu"):
+    def __init__(self, cfg_ctrl: BeyondMimicMotionTrackingCtrlCfg, env, device="cpu"):
         super().__init__(cfg_ctrl=cfg_ctrl, env=env, device=device)
-        assert self.env is not None, "Env is required for BeyondMimicCtrl"
+        assert self.env is not None, "Env is required for BeyondMimicMotionTrackingCtrlCfg"
         self.override_robot_anchor_pos = self.cfg_ctrl.override_robot_anchor_pos
 
         motion_file = self.cfg_ctrl.motion_path
         motion_cfg = self.cfg_ctrl.motion_cfg
-        body_indexes = [motion_cfg.body_names_all.index(name) for name in motion_cfg.body_names]
+        self.body_indexes = [motion_cfg.body_names_all.index(name) for name in motion_cfg.body_names]
         self.motion_anchor_body_index = motion_cfg.body_names.index(motion_cfg.anchor_body_name)
 
-        self.motion = MotionLoader(motion_file, body_indexes, device="cpu")
+        self.motion = MotionLoader(motion_file, self.body_indexes, device="cpu")
         self.timestep = 0
         self.playing = True
 
@@ -87,18 +87,25 @@ class BeyondMimicCtrl(Controller):
         return anchor_pos_w
 
     @property
+    def motion_anchor_quat_w(self) -> np.ndarray:
+        anchor_quat_w_raw = self.motion.body_quat_w[self.timestep, self.motion_anchor_body_index].copy()[[1, 2, 3, 0]]
+        return anchor_quat_w_raw
+
+    @property
+    def motion_anchor_pos_w(self) -> np.ndarray:
+        anchor_pos_w_raw = self.motion.body_pos_w[self.timestep, self.motion_anchor_body_index].copy()
+        return anchor_pos_w_raw
+
+    @property
     def anchor_quat_w(self) -> np.ndarray:
         anchor_quat_w_raw = self.motion.body_quat_w[self.timestep, self.motion_anchor_body_index].copy()[[1, 2, 3, 0]]
-        return self.motion_init_align.align_quat(anchor_quat_w_raw)
+        return self.motion_init_align.align_quat(anchor_quat_w_raw)  #[x,y,z,w]
 
     @property
     def robot_anchor_pos_w(self) -> np.ndarray:
-        if self.override_robot_anchor_pos:  # OVERRIDE
-            return self.anchor_pos_w
-        else:
-            base_pos = self.env.torso_pos
-            assert base_pos is not None
-            return base_pos
+        base_pos = self.env.torso_pos
+        assert base_pos is not None
+        return base_pos
 
     @property
     def robot_anchor_quat_w(self) -> np.ndarray:
@@ -117,9 +124,15 @@ class BeyondMimicCtrl(Controller):
         else:
             return None
 
+    @property
+    def fk_info(self) -> np.ndarray:
+        fk_info = self.env.fk_info
+        assert fk_info is not None
+        return fk_info        
+
     def reset(self):
         self.timestep = 0
-        self.pbar = ProgressBar(f"BeyondmimicCtrl {self.cfg_ctrl.motion_name}", self.motion.time_step_total)
+        self.pbar = ProgressBar(f"BeyondMimicMotionTrackingCtrlCfg {self.cfg_ctrl.motion_name}", self.motion.time_step_total)
 
         # align the robot to the motion's starting pose
         init2anchor_pos = self.motion.body_pos_w[0, self.motion_anchor_body_index].copy()
@@ -143,6 +156,19 @@ class BeyondMimicCtrl(Controller):
                     self.playing = False
 
     def get_data(self):
+        future_steps = getattr(self.cfg_ctrl, "future_steps", 35)
+        total_frames = self.motion.time_step_total
+        target_indices = np.arange(self.timestep + 1, self.timestep + future_steps + 1)
+        target_indices = np.clip(target_indices, 0, total_frames - 1)
+
+        future_motion_data = {
+            "joint_pos": self.motion.joint_pos[target_indices],
+            "joint_vel": self.motion.joint_vel[target_indices],
+            "body_pos_w": self.motion._body_pos_w[target_indices][:, self.body_indexes],
+            "body_quat_w": self.motion._body_quat_w[target_indices][:, self.body_indexes][..., [1, 2, 3, 0]],
+            "body_lin_vel_w": self.motion._body_lin_vel_w[target_indices][:, self.body_indexes],
+            "body_ang_vel_w": self.motion._body_ang_vel_w[target_indices][:, self.body_indexes],
+        }
         ctrl_data = {
             "command": self.command,
             "joint_pos": self.joint_pos,
@@ -151,18 +177,22 @@ class BeyondMimicCtrl(Controller):
             "robot_anchor_quat_w": self.robot_anchor_quat_w,
             "anchor_pos_w": self.anchor_pos_w,
             "anchor_quat_w": self.anchor_quat_w,
+            "motion_anchor_pos_w": self.motion_anchor_pos_w,
+            "motion_anchor_quat_w": self.motion_anchor_quat_w,
             "timestep": self.timestep,
+            "fk_info": self.fk_info,
             "hand_pose": self.hand_pose,
+            "future_motion": future_motion_data,
         }
         return ctrl_data
 
 
 if __name__ == "__main__":
     # Example usage
-    from robojudo.config.g1.ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg
+    from robojudo.config.g1.ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg, G1BeyondMimicMotionTrackingCtrlCfg
     from robojudo.config.g1.env.g1_mujuco_env_cfg import G1MujocoEnvCfg
     from robojudo.environment.mujoco_env import MujocoEnv
 
     env = MujocoEnv(cfg_env=G1MujocoEnvCfg())
-    ctrl = BeyondMimicCtrl(cfg_ctrl=G1BeyondmimicCtrlCfg(), env=env)
+    ctrl = BeyondMimicMotionTrackingCtrl(cfg_ctrl=G1BeyondMimicMotionTrackingCtrlCfg(), env=env)
     print(ctrl.get_data())  # This will print the command tensor

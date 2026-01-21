@@ -155,3 +155,23 @@ def subtract_frame_transforms(
 
     q12 = r12.as_quat()
     return t12, q12
+
+def quat_mul(q1, q2):
+    r1 = sRot.from_quat(q1)
+    r2 = sRot.from_quat(q2)
+    return (r1 * r2).as_quat()
+
+def quat_conjugate_np(q):
+    res = np.copy(q)
+    res[..., :3] *= -1.0
+    return res
+
+def yaw_quat_np(q):
+    q = np.array(q)
+    qx, qy, qz, qw = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+    yaw = np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))
+    res = np.zeros_like(q)
+    res[..., 2] = np.sin(yaw / 2.0)
+    res[..., 3] = np.cos(yaw / 2.0)
+    norm = np.linalg.norm(res, axis=-1, keepdims=True)
+    return res / np.maximum(norm, 1e-9)

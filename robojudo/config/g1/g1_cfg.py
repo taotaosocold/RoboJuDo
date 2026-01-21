@@ -10,7 +10,7 @@ from robojudo.pipeline.pipeline_cfgs import (
     RlPipelineCfg,  # noqa: F401
 )
 
-from .ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg  # noqa: F401
+from .ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg, G1BeyondmimicCtrlCfg23DOF, G1BeyondmimicMotionTrackingCtrlCfg  # noqa: F401
 from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
     G1MotionCtrlCfg,
     G1MotionH2HCtrlCfg,
@@ -23,7 +23,7 @@ from .env.g1_mujuco_env_cfg import G1_12MujocoEnvCfg, G1_23MujocoEnvCfg, G1Mujoc
 from .env.g1_real_env_cfg import G1RealEnvCfg, G1UnitreeCfg  # noqa: F401
 from .policy.g1_amo_policy_cfg import G1AmoPolicyCfg  # noqa: F401
 from .policy.g1_asap_policy_cfg import G1AsapLocoPolicyCfg, G1AsapPolicyCfg  # noqa: F401
-from .policy.g1_beyondmimic_policy_cfg import G1BeyondMimicPolicyCfg  # noqa: F401
+from .policy.g1_beyondmimic_policy_cfg import G1BeyondMimicPolicyCfg, G1BeyondMimicPolicyCfg23DOF  # noqa: F401
 from .policy.g1_h2h_policy_cfg import G1H2HPolicyCfg  # noqa: F401
 from .policy.g1_kungfubot_policy_cfg import G1KungfuBotGeneralPolicyCfg, G1KungfuBotPolicyCfg  # noqa: F401
 from .policy.g1_smooth_policy_cfg import G1SmoothPolicyCfg  # noqa: F401
@@ -198,8 +198,52 @@ class g1_beyondmimic_with_ctrl(RlPipelineCfg):
     policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg(
         policy_name="Dance_wose",
         use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
+        max_timestep=250,
     )
 
+@cfg_registry.register
+class g1_beyondmimic_23DOF_with_ctrl(RlPipelineCfg):
+    """
+    BeyondMimic with External BeyondMimicCtrl as motion source.
+    """
+
+    robot: str = "g1"
+    env: G1MujocoEnvCfg = G1_23MujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg | G1BeyondmimicCtrlCfg] = [
+        KeyboardCtrlCfg(),
+        G1BeyondmimicCtrlCfg23DOF(
+            motion_name="144_03_stageii",  # you can put your own motion file in assets/motions/g1
+        ),
+    ]
+
+    policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg23DOF(
+        policy_name="policy",
+        policy_type="BeyondMimicPolicy",
+        use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
+        use_modelmeta_config=False,
+    )
+
+@cfg_registry.register
+class g1_beyondmimic_MotionTracking_with_ctrl(RlPipelineCfg):
+    """
+    BeyondMimic with External BeyondMimicCtrl as motion source.
+    """
+
+    robot: str = "g1"
+    env: G1MujocoEnvCfg = G1_23MujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg | G1BeyondmimicCtrlCfg] = [
+        KeyboardCtrlCfg(),
+        G1BeyondmimicMotionTrackingCtrlCfg(
+            motion_name="105_17_stageii",  # you can put your own motion file in assets/motions/g1
+        ),
+    ]
+
+    policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg23DOF(
+        policy_name="MotionTracking",
+        policy_type="BeyondMimicMotionTrackingPolicy",
+        use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
+        use_modelmeta_config=False,
+    )
 
 @cfg_registry.register
 class g1_asap(RlPipelineCfg):

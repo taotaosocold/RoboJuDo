@@ -151,6 +151,30 @@ class BeyondMimicCtrlCfg(CtrlCfg):
 
     motion_cfg: MotionCommandCfg
 
+class BeyondMimicMotionTrackingCtrlCfg(CtrlCfg):
+    ctrl_type: str = "BeyondMimicMotionTrackingCtrl"
+
+    override_robot_anchor_pos: bool = False  # if True, drop pos fdb
+
+    # ==== motion config ====
+    robot: str
+    motion_name: str
+
+    @property
+    def motion_path(self) -> str:
+        motion_path = ASSETS_DIR / f"motions/{self.robot}/beyondmimic/{self.motion_name}.npz"
+        return motion_path.as_posix()
+
+    # ==== from beyondmimic ====
+    class MotionCommandCfg(Config):
+        """Configuration for the motion command."""
+
+        anchor_body_name: str
+        body_names: list[str]
+        body_names_all: list[str]
+        """from beyondmimic asset, used for indexing"""
+
+    motion_cfg: MotionCommandCfg
 
 class TwistRedisCtrlCfg(CtrlCfg):
     ctrl_type: str = "TwistRedisCtrl"
