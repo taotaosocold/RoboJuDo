@@ -224,6 +224,23 @@ class g1_beyondmimic_23DOF_with_ctrl(RlPipelineCfg):
     )
 
 @cfg_registry.register
+class g1_beyondmimic_23DOF_with_ctrl_real(g1_beyondmimic_23DOF_with_ctrl):
+    # env: G1DummyEnvCfg = G1DummyEnvCfg()
+    env: G1RealEnvCfg = G1RealEnvCfg(
+        # env_type="UnitreeEnv",  # For unitree_sdk2py
+        env_type="UnitreeCppEnv",  # For unitree_cpp, check README for more details
+        unitree=G1UnitreeCfg(
+            net_if="eth0",  # note: change to your network interface
+        ),
+    )
+
+    ctrl: list[UnitreeCtrlCfg] = [
+        UnitreeCtrlCfg(),
+    ]
+
+    do_safety_check: bool = True  # enable safety check for real robot
+
+@cfg_registry.register
 class g1_beyondmimic_MotionTracking_with_ctrl(RlPipelineCfg):
     """
     BeyondMimic with External BeyondMimicCtrl as motion source.
