@@ -230,12 +230,16 @@ class g1_beyondmimic_23DOF_with_ctrl_real(g1_beyondmimic_23DOF_with_ctrl):
         # env_type="UnitreeEnv",  # For unitree_sdk2py
         env_type="UnitreeCppEnv",  # For unitree_cpp, check README for more details
         unitree=G1UnitreeCfg(
-            net_if="eth0",  # note: change to your network interface
+            net_if="enp6s0",  # note: change to your network interface
         ),
+        # joint2motor_idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1]
     )
 
     ctrl: list[UnitreeCtrlCfg] = [
         UnitreeCtrlCfg(),
+        G1BeyondmimicCtrlCfg23DOF(
+            motion_name="103_03_stageii",  # you can put your own motion file in assets/motions/g1
+        ),
     ]
 
     do_safety_check: bool = True  # enable safety check for real robot
