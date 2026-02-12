@@ -255,12 +255,12 @@ class g1_beyondmimic_MotionTracking_with_ctrl(RlPipelineCfg):
     ctrl: list[KeyboardCtrlCfg | G1BeyondmimicCtrlCfg] = [
         KeyboardCtrlCfg(),
         G1BeyondmimicMotionTrackingCtrlCfg(
-            motion_name="105_17_stageii",  # you can put your own motion file in assets/motions/g1
+            motion_name="113_08_poses",  # you can put your own motion file in assets/motions/g1
         ),
     ]
 
     policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg23DOF(
-        policy_name="MotionTracking",
+        policy_name="MOEMLPTransformerActorCritic",
         policy_type="BeyondMimicMotionTrackingPolicy",
         use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
         use_modelmeta_config=False,

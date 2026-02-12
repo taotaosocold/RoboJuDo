@@ -108,10 +108,10 @@ class BeyondMimicMotionTrackingPolicy(Policy):
 
     def _prepare_policy(self):
         inputs = self.session.get_inputs()
-        self.history_length = inputs[0].shape[1]
-        self.future_steps = inputs[1].shape[1]
-        self.proprio_dim = inputs[0].shape[2]
-        self.future_motion_dim = inputs[1].shape[2]
+        self.history_length = inputs[1].shape[1]
+        self.future_steps = inputs[0].shape[1]
+        self.proprio_dim = inputs[1].shape[2]
+        self.future_motion_dim = inputs[0].shape[2]
         dummy_proprio = np.zeros((1, self.history_length, self.proprio_dim), dtype=np.float32)
         dummy_future = np.zeros((1, self.future_steps, self.future_motion_dim), dtype=np.float32)
         obs_dict = {
@@ -217,19 +217,24 @@ class BeyondMimicMotionTrackingPolicy(Policy):
         return np.array(future_obs) # [future_steps, dim]
 
     # fk_info返回过来的连杆顺序是去掉world的mujoco的顺序
-    def _compute_robot_body_state(self, fk_info, robot_anchor_pos_w, robot_anchor_quat_w):
+    def _compute_robot_body_state(self, fk_info, robot_anchor_pos_w, robot_anchor_quat_w, robot_anchor_lin_vel_w, robot_anchor_ang_vel_w):
         keys = list(fk_info.keys())
         body_pos = []
         body_quat = []
-        robot_anchor_quat_w = robot_anchor_quat_w
+        body_lin_vel = []
+        body_ang_vel = []
         for idx in self.robot_body_indexes:
             name = keys[idx]
             body_data = fk_info[name]
             body_pos.append(body_data['pos'])
-            body_quat.append(body_data['quat'])  # to [x, y, z, w]
+            body_quat.append(body_data['quat'])  # to [x, y, z, w]、
+            body_lin_vel.append(body_data['lin_vel']) 
+            body_ang_vel.append(body_data['ang_vel'])
 
         body_pos_w = np.array(body_pos)    # [14, 3]
         body_quat_w = np.array(body_quat)  # [14, 4]
+        body_lin_vel_w = np.array(body_lin_vel) # [14, 3]
+        body_ang_vel_w = np.array(body_ang_vel) # [14, 3]
 
         rel_pos_w = body_pos_w - robot_anchor_pos_w[np.newaxis, :]
         robot_body_pos_r = quat_rotate_inverse_np(robot_anchor_quat_w, rel_pos_w).flatten()
@@ -237,7 +242,9 @@ class BeyondMimicMotionTrackingPolicy(Policy):
         rel_quats = quat_mul(anchor_quat_inv[np.newaxis, :], body_quat_w)
         mats = matrix_from_quat(rel_quats) # [14, 3, 3]
         robot_body_ori_r = mats[:, :, :2].reshape(-1) # [14 * 3 * 2] = 84
-        return robot_body_pos_r, robot_body_ori_r
+        robot_body_lin_vel_r = quat_rotate_inverse_np(robot_anchor_quat_w, body_lin_vel_w).flatten()
+        robot_body_ang_vel_r = quat_rotate_inverse_np(robot_anchor_quat_w, body_ang_vel_w).flatten()
+        return robot_body_pos_r, robot_body_ori_r, robot_body_lin_vel_r, robot_body_ang_vel_r
 
     def get_observation(self, env_data, ctrl_data):
         dof_pos = env_data.dof_pos
@@ -249,7 +256,7 @@ class BeyondMimicMotionTrackingPolicy(Policy):
         command, robot_anchor_pos_w, robot_anchor_quat_w, anchor_pos_w, anchor_quat_w, motion_anchor_pos_w, motion_anchor_quat_w, fk_info, hand_pose = self._get_command(
             env_data, ctrl_data
         )
-        robot_body_pos_r, robot_body_ori_r = self._compute_robot_body_state(fk_info, robot_anchor_pos_w, robot_anchor_quat_w)
+        robot_body_pos_r, robot_body_ori_r, robot_body_lin_vel_r, robot_body_ang_vel_r = self._compute_robot_body_state(fk_info, robot_anchor_pos_w, robot_anchor_quat_w, lin_vel, ang_vel)
         gravity_vec_w = np.array([0.0, 0.0, -1.0])
         projected_gravity_b = quat_rotate_inverse_np(robot_anchor_quat_w, gravity_vec_w)
 
@@ -276,13 +283,15 @@ class BeyondMimicMotionTrackingPolicy(Policy):
         obs_prop = np.concatenate(
             [
                 obs_command,
-                obs_base_lin_vel,
-                obs_base_ang_vel,
                 obs_motion_anchor_pos_b,
                 obs_motion_anchor_ori_b,
                 robot_body_pos_r,
                 robot_body_ori_r,
-                projected_gravity_b,
+                robot_body_lin_vel_r,
+                robot_body_ang_vel_r,
+                # obs_base_lin_vel,
+                # obs_base_ang_vel,
+                # projected_gravity_b,
                 obs_joint_pos_rel,
                 obs_joint_vel_rel,
                 obs_last_action,
@@ -312,8 +321,8 @@ class BeyondMimicMotionTrackingPolicy(Policy):
 
     def get_action(self, obs_dict: dict) -> np.ndarray:
         ort_inputs = {
-            self.input_names[0]: obs_dict["policy_proprio_history"].astype(np.float32),
-            self.input_names[1]: obs_dict["future_motion"].astype(np.float32),
+            self.input_names[1]: obs_dict["policy_proprio_history"].astype(np.float32),
+            self.input_names[0]: obs_dict["future_motion"].astype(np.float32),
         }
 
         ort_outputs = self.session.run(

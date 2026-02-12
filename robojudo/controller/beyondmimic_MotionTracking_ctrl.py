@@ -156,9 +156,9 @@ class BeyondMimicMotionTrackingCtrl(Controller):
                     self.playing = False
 
     def get_data(self):
-        future_steps = getattr(self.cfg_ctrl, "future_steps", 35)
+        future_steps = getattr(self.cfg_ctrl, "future_steps", 20)
         total_frames = self.motion.time_step_total
-        target_indices = np.arange(self.timestep + 1, self.timestep + future_steps + 1)
+        target_indices = np.arange(self.timestep, self.timestep + future_steps)
         target_indices = np.clip(target_indices, 0, total_frames - 1)
 
         future_motion_data = {
