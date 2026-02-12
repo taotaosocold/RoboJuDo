@@ -212,15 +212,16 @@ class g1_beyondmimic_23DOF_with_ctrl(RlPipelineCfg):
     ctrl: list[KeyboardCtrlCfg | G1BeyondmimicCtrlCfg] = [
         KeyboardCtrlCfg(),
         G1BeyondmimicCtrlCfg23DOF(
-            motion_name="144_03_stageii",  # you can put your own motion file in assets/motions/g1
+            motion_name="gvhmr_jump",  # you can put your own motion file in assets/motions/g1
         ),
     ]
 
     policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg23DOF(
-        policy_name="policy",
+        policy_name="MLPActorCritic",
         policy_type="BeyondMimicPolicy",
         use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
         use_modelmeta_config=False,
+        without_state_estimator=True,
     )
 
 @cfg_registry.register
@@ -237,9 +238,9 @@ class g1_beyondmimic_23DOF_with_ctrl_real(g1_beyondmimic_23DOF_with_ctrl):
 
     ctrl: list[UnitreeCtrlCfg] = [
         UnitreeCtrlCfg(),
-        G1BeyondmimicCtrlCfg23DOF(
-            motion_name="103_03_stageii",  # you can put your own motion file in assets/motions/g1
-        ),
+        # G1BeyondmimicCtrlCfg23DOF(
+        #     motion_name="103_03_stageii",  # you can put your own motion file in assets/motions/g1
+        # ),
     ]
 
     do_safety_check: bool = True  # enable safety check for real robot
@@ -255,16 +256,37 @@ class g1_beyondmimic_MotionTracking_with_ctrl(RlPipelineCfg):
     ctrl: list[KeyboardCtrlCfg | G1BeyondmimicCtrlCfg] = [
         KeyboardCtrlCfg(),
         G1BeyondmimicMotionTrackingCtrlCfg(
-            motion_name="113_08_poses",  # you can put your own motion file in assets/motions/g1
+            motion_name="stand_to_squat",  # you can put your own motion file in assets/motions/g1
         ),
     ]
 
     policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg23DOF(
-        policy_name="MOEMLPTransformerActorCritic",
+        policy_name="MOEMLPTransformerActorCritic1",
         policy_type="BeyondMimicMotionTrackingPolicy",
         use_motion_from_model=False,  # use motion from BeyondmimicCtrl instead of the onnx
         use_modelmeta_config=False,
     )
+
+@cfg_registry.register
+class g1_beyondmimic_MotionTracking_with_ctrl_real(g1_beyondmimic_MotionTracking_with_ctrl):
+    # env: G1DummyEnvCfg = G1DummyEnvCfg()
+    env: G1RealEnvCfg = G1RealEnvCfg(
+        # env_type="UnitreeEnv",  # For unitree_sdk2py
+        env_type="UnitreeCppEnv",  # For unitree_cpp, check README for more details
+        unitree=G1UnitreeCfg(
+            net_if="enp6s0",  # note: change to your network interface
+        ),
+        # joint2motor_idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1]
+    )
+
+    ctrl: list[UnitreeCtrlCfg] = [
+        UnitreeCtrlCfg(),
+        G1BeyondmimicMotionTrackingCtrlCfg(
+            motion_name="stand_to_squat",  # you can put your own motion file in assets/motions/g1
+        ),
+    ]
+
+    do_safety_check: bool = True  # enable safety check for real robot
 
 @cfg_registry.register
 class g1_asap(RlPipelineCfg):

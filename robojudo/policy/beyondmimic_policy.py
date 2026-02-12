@@ -226,16 +226,16 @@ class BeyondMimicPolicy(Policy):
     def get_action(self, obs: np.ndarray) -> np.ndarray:
         ort_inputs = {
             "obs": np.expand_dims(obs, axis=0).astype(np.float32),
-            "time_step": np.expand_dims(np.array([int(self.timestep)]), axis=0).astype(np.float32),
+            # "time_step": np.expand_dims(np.array([int(self.timestep)]), axis=0).astype(np.float32),
         }
 
         ort_outputs = self.session.run(
             [
                 "actions",
-                "joint_pos",
-                "joint_vel",
-                "body_pos_w",
-                "body_quat_w",
+                # "joint_pos",
+                # "joint_vel",
+                # "body_pos_w",
+                # "body_quat_w",
             ],
             ort_inputs,
         )
