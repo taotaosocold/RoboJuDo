@@ -175,3 +175,35 @@ def yaw_quat_np(q):
     res[..., 3] = np.cos(yaw / 2.0)
     norm = np.linalg.norm(res, axis=-1, keepdims=True)
     return res / np.maximum(norm, 1e-9)
+
+def quat_apply_inverse(q, v):
+    """
+    使用四元数的逆旋转向量 v。
+    参数:
+    q: 四元数，形状为 (..., 4)，默认顺序为 (w, x, y, z)
+    v: 向量，形状为 (..., 3)
+    返回:
+    旋转后的向量，形状为 (..., 3)
+    """
+    # 拆分标量部分和向量部分
+    qw = q[..., 0]
+    qv = q[..., 1:]
+    
+    # 对于逆变换，向量部分取负 (conjugate)
+    # 我们直接在公式中通过减法来实现，而不必显式创建新数组
+    
+    # v + 2 * (-qv) x ((-qv) x v + qw * v)
+    # 简化后等价于下面的计算步骤：
+    
+    # 这里的 cross product 支持批量运算
+    # 注意：如果 qv 是负的，cross(qv, v) 变号，再次 cross 也会变号
+    
+    # 预计算 cross(qv, v)
+    # 这里的 qv 取反是因为我们要算逆变换
+    neg_qv = -qv
+    
+    # 核心公式实现
+    t = 2.0 * np.cross(neg_qv, v)
+    v_transformed = v + qw[..., np.newaxis] * t + np.cross(neg_qv, t)
+    
+    return v_transformed

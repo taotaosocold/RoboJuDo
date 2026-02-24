@@ -244,6 +244,36 @@ class BeyondMimicPolicyCfg(PolicyCfg):
 
         return self
 
+class VaeMimicPolicyCfg(PolicyCfg):
+    policy_type: str = "VaeMimicPolicy"
+    disable_autoload: bool = True
+
+    policy_name: str = "0212"
+    max_timestep: int = -1
+    start_timestep: int = 0
+
+    @property
+    def policy_file(self) -> str:
+        policy_file = ASSETS_DIR / f"models/{self.robot}/vaemimic/{self.policy_name}.onnx"
+        return policy_file.as_posix()
+
+    # ======= POLICY SPECIFIC CONFIGURATION =======
+    action_scales: list[float]
+
+    without_state_estimator: bool
+    override_robot_anchor_pos: bool = True  # if True, drop pos fdb
+
+    use_modelmeta_config: bool = True  # if True, use the config from modelmeta
+    use_motion_from_model: bool = False  # if True, use the motion data of onnx model
+
+    @model_validator(mode="after")
+    def check_modelmeta(self):
+        if self.use_motion_from_model:
+            if not self.use_modelmeta_config:
+                raise ValueError("use_modelmeta_config must be True when use_motion_from_model")
+
+        return self
+
 
 class AsapPolicyCfg(PolicyCfg):
     policy_type: str = "AsapPolicy"

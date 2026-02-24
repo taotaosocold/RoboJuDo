@@ -48,8 +48,8 @@ class PolicyWrapper:
         action = self.policy.get_action(obs)
         return self.actions_adapter.fit(action)
 
-    def get_pd_target(self, obs):
-        action = self.policy.get_action(obs)
+    def get_pd_target(self, obs, code):
+        action = self.policy.get_action(obs, code)
         pd_target = action + self.policy.default_pos
         return self.actions_adapter.fit(pd_target, template=self.env_dof_cfg.default_pos)
 
@@ -154,7 +154,7 @@ class RlPipeline(Pipeline):
             logger.info(f"{'=' * 10} COMMANDS {'=' * 10}\n{commands}")
 
         obs, extras = self.policy.get_observation(env_data, ctrl_data)
-        pd_target = self.policy.get_pd_target(obs)
+        pd_target = self.policy.get_pd_target(obs, extras["code"])
 
         if not dry_run:
             self.env.step(pd_target, extras.get("hand_pose", None))

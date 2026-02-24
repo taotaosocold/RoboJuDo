@@ -151,6 +151,30 @@ class BeyondMimicCtrlCfg(CtrlCfg):
 
     motion_cfg: MotionCommandCfg
 
+class VaeMimicCtrlCfg(CtrlCfg):
+    ctrl_type: str = "VaeMimicCtrl"
+
+    override_robot_anchor_pos: bool = False  # if True, drop pos fdb
+
+    # ==== motion config ====
+    robot: str
+    motion_name: str
+    code_path: str
+    code_key: str
+
+    @property
+    def motion_path(self) -> str:
+        motion_path = ASSETS_DIR / f"motions/{self.robot}/vaemimic/{self.motion_name}.npz"
+        return motion_path.as_posix()
+
+    class MotionCommandCfg(Config):
+
+        anchor_body_name: str
+        body_names: list[str]
+        body_names_all: list[str]
+
+    motion_cfg: MotionCommandCfg
+
 class BeyondMimicMotionTrackingCtrlCfg(CtrlCfg):
     ctrl_type: str = "BeyondMimicMotionTrackingCtrl"
 
