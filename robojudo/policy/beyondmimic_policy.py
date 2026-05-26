@@ -82,6 +82,7 @@ class BeyondMimicPolicy(Policy):
         self.without_state_estimator = self.cfg_policy.without_state_estimator
         self.override_robot_anchor_pos = self.cfg_policy.override_robot_anchor_pos
         self.use_motion_from_model = self.cfg_policy.use_motion_from_model
+        self.use_residual_action = self.cfg_policy.use_residual_action
 
         self.max_timestep = self.cfg_policy.max_timestep
         self.command = None
@@ -254,6 +255,10 @@ class BeyondMimicPolicy(Policy):
                 "body_pos_w": np.asarray(ort_outputs[3]).squeeze(),
                 "body_quat_w": np.asarray(ort_outputs[4]).squeeze(),  # as [w, x, y, z]
             }
+
+        if self.use_residual_action and self.command is not None:
+            scaled_actions = scaled_actions + self.command["joint_pos"]
+
         return scaled_actions
 
     def get_init_dof_pos(self) -> np.ndarray:

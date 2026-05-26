@@ -48,9 +48,16 @@ class PolicyWrapper:
         action = self.policy.get_action(obs)
         return self.actions_adapter.fit(action)
 
-    def get_pd_target(self, obs):
+    def get_pd_target(self, obs, motion_joint_pos: np.ndarray | None = None):
         action = self.policy.get_action(obs)
-        pd_target = action + self.policy.default_pos
+        use_residual = getattr(self.policy.cfg_policy, "use_residual_action", False)
+        if use_residual and motion_joint_pos is not None:
+            # pd_target = action * scale + motion_joint_pos (residual on reference motion)
+            # note: action_scales already applied inside get_action(), so action is already scaled
+            motion_joint_pos_adapted = self.obs_adapter.fit(motion_joint_pos)
+            pd_target = action + motion_joint_pos_adapted
+        else:
+            pd_target = action + self.policy.default_pos
         return self.actions_adapter.fit(pd_target, template=self.env_dof_cfg.default_pos)
 
     def get_init_dof_pos(self):
@@ -154,7 +161,10 @@ class RlPipeline(Pipeline):
             logger.info(f"{'=' * 10} COMMANDS {'=' * 10}\n{commands}")
 
         obs, extras = self.policy.get_observation(env_data, ctrl_data)
-        pd_target = self.policy.get_pd_target(obs)
+        # For residual action mode: extract motion reference joint_pos from ctrl_data
+        beyondmimic_ctrl_data = ctrl_data.get("BeyondMimicCtrl", None)
+        motion_joint_pos = beyondmimic_ctrl_data.get("joint_pos", None) if beyondmimic_ctrl_data is not None else None
+        pd_target = self.policy.get_pd_target(obs, motion_joint_pos=motion_joint_pos)
 
         if not dry_run:
             self.env.step(pd_target, extras.get("hand_pose", None))

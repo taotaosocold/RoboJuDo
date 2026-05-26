@@ -63,7 +63,7 @@ class BeyondMimicCtrl(Controller):
 
         self.motion = MotionLoader(motion_file, body_indexes, device="cpu")
         self.timestep = 0
-        self.playing = False
+        self.playing = True
 
         self.motion_init_align = TransformAlignment(yaw_only=True, xy_only=True)
         self.reset()

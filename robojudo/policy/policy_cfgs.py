@@ -233,6 +233,8 @@ class BeyondMimicPolicyCfg(PolicyCfg):
     without_state_estimator: bool
     override_robot_anchor_pos: bool = True  # if True, drop pos fdb
 
+    use_residual_action: bool = False  # if True, pd_target = action * scale + motion_joint_pos (residual on reference motion)
+
     use_modelmeta_config: bool = True  # if True, use the config from modelmeta
     use_motion_from_model: bool = True  # if True, use the motion data of onnx model
 

@@ -11,6 +11,7 @@ from robojudo.pipeline.pipeline_cfgs import (
 )
 
 from .ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg  # noqa: F401
+from .ctrl.marathon_beyondmimic_ctrl_cfg import MarathonBeyondmimicCtrlCfg  # noqa: F401
 from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
     G1MotionCtrlCfg,
     G1MotionH2HCtrlCfg,
@@ -19,11 +20,13 @@ from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
 )
 from .ctrl.g1_twist_redis_ctrl_cfg import G1TwistRedisCtrlCfg  # noqa: F401
 from .env.g1_dummy_env_cfg import G1DummyEnvCfg  # noqa: F401
-from .env.g1_mujuco_env_cfg import G1_12MujocoEnvCfg, G1_23MujocoEnvCfg, G1MujocoEnvCfg  # noqa: F401
+from .env.marathon_mujuco_env_cfg import MarathonMujocoEnvCfg  # noqa: F401
+from .env.g1_mujuco_env_cfg import G1MujocoEnvCfg  # noqa: F401
 from .env.g1_real_env_cfg import G1RealEnvCfg, G1UnitreeCfg  # noqa: F401
 from .policy.g1_amo_policy_cfg import G1AmoPolicyCfg  # noqa: F401
 from .policy.g1_asap_policy_cfg import G1AsapLocoPolicyCfg, G1AsapPolicyCfg  # noqa: F401
 from .policy.g1_beyondmimic_policy_cfg import G1BeyondMimicPolicyCfg, G1BeyondMimicResidualPolicyCfg  # noqa: F401
+from .policy.marathon_beyondmimic_policy_cfg import MarathonBeyondMimicPolicyCfg, MarathonBeyondMimicResidualPolicyCfg  # noqa: F401
 from .policy.g1_h2h_policy_cfg import G1H2HPolicyCfg  # noqa: F401
 from .policy.g1_kungfubot_policy_cfg import G1KungfuBotGeneralPolicyCfg, G1KungfuBotPolicyCfg  # noqa: F401
 from .policy.g1_smooth_policy_cfg import G1SmoothPolicyCfg  # noqa: F401
@@ -160,23 +163,95 @@ class g1_h2h(RlPipelineCfg):
 
 
 @cfg_registry.register
-class g1_beyondmimic(RlPipelineCfg):
+class marathon_beyondmimic(RlPipelineCfg):
     """
-    BeyondMimic Policy, support both with and without state estimator.
+    Marathon BeyondMimic Policy, motion embedded in onnx (use_motion_from_model=True).
     """
 
-    robot: str = "g1"
-    env: G1MujocoEnvCfg = G1MujocoEnvCfg()
+    robot: str = "marathon"
+    env: MarathonMujocoEnvCfg = MarathonMujocoEnvCfg()
     ctrl: list[KeyboardCtrlCfg] = [
         KeyboardCtrlCfg(),
     ]
 
-    policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg(
-        policy_name="dance1_subject2",
-        without_state_estimator=False,
-        use_modelmeta_config=True,  # use robot dof config from modelmeta
-        use_motion_from_model=True,  # use motion from onnx model
+    policy: MarathonBeyondMimicPolicyCfg = MarathonBeyondMimicPolicyCfg(
+        policy_name="113_08_poses",
+        without_state_estimator=True,
+        use_modelmeta_config=True,
+        use_motion_from_model=True,
+        max_timestep=515,
+    )
+
+
+@cfg_registry.register
+class marathon_beyondmimic_with_ctrl(RlPipelineCfg):
+    """
+    Marathon BeyondMimic Policy, motion from external MarathonBeyondmimicCtrlCfg (use_motion_from_model=False).
+    Put motion .npz files in assets/motions/marathon/beyondmimic/.
+    """
+
+    robot: str = "marathon"
+    env: MarathonMujocoEnvCfg = MarathonMujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg | MarathonBeyondmimicCtrlCfg] = [
+        KeyboardCtrlCfg(),
+        MarathonBeyondmimicCtrlCfg(
+            motion_name="dance1_subject2",
+        ),
+    ]
+
+    policy: MarathonBeyondMimicPolicyCfg = MarathonBeyondMimicPolicyCfg(
+        policy_name="fallAndGetUp2_subject2_clip",
+        without_state_estimator=True,
+        use_modelmeta_config=True,
+        use_motion_from_model=False,
+        max_timestep=515,
+    )
+
+
+@cfg_registry.register
+class marathon_beyondmimic_residual(RlPipelineCfg):
+    """
+    Marathon BeyondMimic residual action policy, motion embedded in onnx.
+    pd_target = action * scale + motion_joint_pos
+    """
+
+    robot: str = "marathon"
+    env: MarathonMujocoEnvCfg = MarathonMujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg] = [
+        KeyboardCtrlCfg(),
+    ]
+
+    policy: MarathonBeyondMimicResidualPolicyCfg = MarathonBeyondMimicResidualPolicyCfg(
+        policy_name="113_08_poses_residual_new",
+        use_modelmeta_config=True,
+        use_motion_from_model=True,
+        without_state_estimator=True,
         max_timestep=5000,
+    )
+
+
+@cfg_registry.register
+class marathon_beyondmimic_residual_with_ctrl(RlPipelineCfg):
+    """
+    Masbot BeyondMimic residual action policy, motion from external MarathonBeyondmimicCtrlCfg.
+    pd_target = action * scale + motion_joint_pos
+    Put motion .npz files in assets/motions/marathon/beyondmimic/.
+    """
+
+    robot: str = "marathon"
+    env: MarathonMujocoEnvCfg = MarathonMujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg | MarathonBeyondmimicCtrlCfg] = [
+        KeyboardCtrlCfg(),
+        MarathonBeyondmimicCtrlCfg(
+            motion_name="dance1_subject2",
+        ),
+    ]
+
+    policy: MarathonBeyondMimicResidualPolicyCfg = MarathonBeyondMimicResidualPolicyCfg(
+        policy_name="dance1_subject1_residual",
+        use_modelmeta_config=True,
+        use_motion_from_model=False,
+        without_state_estimator=True,
     )
 
 @cfg_registry.register
@@ -227,9 +302,10 @@ class g1_beyondmimic_residual(RlPipelineCfg):
     )
 
 
+@cfg_registry.register
+class g1_asap(RlPipelineCfg):
     """
     Unitree G1 robot configuration, ASAP Policy, Sim2Sim.
-    You can modify to play with other policies and controllers.
     """
 
     robot: str = "g1"
