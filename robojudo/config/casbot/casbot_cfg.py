@@ -175,7 +175,7 @@ class casbot_beyondmimic(RlPipelineCfg):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fallAndGetUp2_subject2_clip",
+        policy_name="fk",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,
