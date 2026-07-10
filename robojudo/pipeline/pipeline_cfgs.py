@@ -25,6 +25,13 @@ class PipelineCfg(Config):
     We recommend enabling this, however if motion is very aggressive, you may disable it.
     """
 
+    fsm_enabled: bool = False
+    """Enable the robot state machine (PASSIVE → FIXED_STAND → POLICY_CONTROL).
+    When enabled, use [STATE_*] commands from controller triggers to switch states."""
+
+    stand_duration: float = 2.0
+    """Duration (seconds) for the FIXED_STAND interpolation to default position."""
+
 
 class RlPipelineCfg(PipelineCfg):
     pipeline_type: str = "RlPipeline"

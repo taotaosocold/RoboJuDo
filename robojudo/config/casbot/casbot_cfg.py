@@ -21,6 +21,7 @@ from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
 from .ctrl.g1_twist_redis_ctrl_cfg import G1TwistRedisCtrlCfg  # noqa: F401
 from .env.g1_dummy_env_cfg import G1DummyEnvCfg  # noqa: F401
 from .env.casbot_mujuco_env_cfg import CasbotMujocoEnvCfg  # noqa: F401
+from .env.casbot_real_env_cfg import CasbotHlCfg, CasbotRealEnvCfg  # noqa: F401
 from .env.g1_mujuco_env_cfg import G1MujocoEnvCfg  # noqa: F401
 from .env.g1_real_env_cfg import G1RealEnvCfg, G1UnitreeCfg  # noqa: F401
 from .policy.g1_amo_policy_cfg import G1AmoPolicyCfg  # noqa: F401
@@ -171,7 +172,62 @@ class casbot_beyondmimic(RlPipelineCfg):
     robot: str = "casbot"
     env: CasbotMujocoEnvCfg = CasbotMujocoEnvCfg()
     ctrl: list[KeyboardCtrlCfg] = [
-        KeyboardCtrlCfg(),
+        KeyboardCtrlCfg(
+            triggers_extra={
+                "1": "[STATE_PASSIVE]",
+                "2": "[STATE_FIXED_STAND]",
+                "3": "[STATE_POLICY]",
+                "0": "[STATE_ESTOP]",
+            },
+        ),
+    ]
+
+    policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
+        policy_name="fk_beyondmimic",
+        without_state_estimator=True,
+        use_modelmeta_config=True,
+        use_motion_from_model=True,
+        max_timestep=8000,
+    )
+
+    fsm_enabled: bool = True
+    do_safety_check: bool = True
+
+
+@cfg_registry.register
+class casbot_beyondmimic_real(RlPipelineCfg):
+    """
+    Casbot BeyondMimic Policy on real robot via hl_motion ROS2 SDK.
+    Run with: python scripts/run_pipeline.py -c casbot_beyondmimic_real
+    """
+
+    robot: str = "casbot"
+    env: CasbotRealEnvCfg = CasbotRealEnvCfg(
+        hl=CasbotHlCfg(
+            robot_joint_names=[
+                # left leg (hl_motion naming)
+                "leg_l1_joint", "leg_l2_joint", "leg_l3_joint", "leg_l4_joint", "leg_l5_joint", "leg_l6_joint",
+                # right leg
+                "leg_r1_joint", "leg_r2_joint", "leg_r3_joint", "leg_r4_joint", "leg_r5_joint", "leg_r6_joint",
+                # waist, head
+                "waist_yaw_joint", "head_yaw_joint", "head_pitch_joint",
+                # left arm
+                "left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint", "left_elbow_pitch_joint", "left_wrist_yaw_joint",
+                # right arm
+                "right_shoulder_pitch_joint", "right_shoulder_roll_joint", "right_shoulder_yaw_joint", "right_elbow_pitch_joint", "right_wrist_yaw_joint",
+            ],
+        ),
+    )
+    ctrl: list[KeyboardCtrlCfg] = [
+        KeyboardCtrlCfg(
+            triggers={
+                "Key.esc": "[SHUTDOWN]",
+                "1": "[STATE_PASSIVE]",
+                "2": "[STATE_FIXED_STAND]",
+                "3": "[STATE_POLICY]",
+                "0": "[STATE_ESTOP]",
+            },
+        ),
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
@@ -181,6 +237,9 @@ class casbot_beyondmimic(RlPipelineCfg):
         use_motion_from_model=True,
         max_timestep=8000,
     )
+
+    fsm_enabled: bool = True
+    do_safety_check: bool = True
 
 
 @cfg_registry.register

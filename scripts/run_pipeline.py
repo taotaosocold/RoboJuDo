@@ -44,7 +44,7 @@ def main():
 
     pipeline = pipeline_class(cfg=cfg)
 
-    if not cfg.env.is_sim:
+    if not cfg.env.is_sim and not cfg.fsm_enabled:
         pipeline.prepare()
 
     while True:

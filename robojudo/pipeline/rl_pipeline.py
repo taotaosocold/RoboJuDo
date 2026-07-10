@@ -1,5 +1,6 @@
 import logging
 import time
+from enum import Enum
 
 import numpy as np
 from box import Box
@@ -17,6 +18,13 @@ from robojudo.utils.progress import ProgressBar
 from robojudo.utils.util_func import get_gravity_orientation
 
 logger = logging.getLogger(__name__)
+
+
+class RobotState(Enum):
+    PASSIVE = "passive"
+    FIXED_STAND = "fixed_stand"
+    POLICY_CONTROL = "policy_control"
+    ESTOP = "estop"
 
 
 class PolicyWrapper:
@@ -92,6 +100,12 @@ class RlPipeline(Pipeline):
         self.freq = self.cfg.policy.freq
         self.dt = 1.0 / self.freq
 
+        # ---- FSM ----
+        self._fsm_enabled = self.cfg.fsm_enabled
+        self._state = RobotState.PASSIVE
+        self._stand_start_dof_pos = None
+        self._stand_start_time = 0.0
+
         self.self_check()
         self.reset()
 
@@ -160,6 +174,12 @@ class RlPipeline(Pipeline):
         if len(commands) > 0:
             logger.info(f"{'=' * 10} COMMANDS {'=' * 10}\n{commands}")
 
+        if self._fsm_enabled:
+            self._fsm_handle_commands(commands)
+            if self._state != RobotState.POLICY_CONTROL:
+                self._fsm_non_policy_step(env_data, ctrl_data, dry_run)
+                return
+
         obs, extras = self.policy.get_observation(env_data, ctrl_data)
         # For residual action mode: extract motion reference joint_pos from ctrl_data
         beyondmimic_ctrl_data = ctrl_data.get("BeyondMimicCtrl", None)
@@ -170,6 +190,70 @@ class RlPipeline(Pipeline):
             self.env.step(pd_target, extras.get("hand_pose", None))
 
         self.post_step_callback(env_data, ctrl_data, extras, pd_target)
+
+    # ---- FSM methods ----
+
+    def _fsm_handle_commands(self, commands: list[str]):
+        for command in commands:
+            match command:
+                case "[STATE_PASSIVE]":
+                    self._fsm_transition(RobotState.PASSIVE)
+                case "[STATE_FIXED_STAND]":
+                    self._fsm_transition(RobotState.FIXED_STAND)
+                case "[STATE_POLICY]":
+                    self._fsm_transition(RobotState.POLICY_CONTROL)
+                case "[STATE_ESTOP]" | "[SHUTDOWN]":
+                    self._fsm_transition(RobotState.ESTOP)
+                case "[SIM_REBORN]":
+                    if hasattr(self.env, "reborn"):
+                        logger.warning("Simulation Env reborn!")
+                        self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
+
+    def _fsm_transition(self, new_state: RobotState):
+        if new_state == self._state:
+            return
+        logger.info(f"[FSM] {self._state.value} → {new_state.value}")
+        self._state = new_state
+        if new_state == RobotState.FIXED_STAND:
+            self._stand_start_dof_pos = self.env.dof_pos.copy()
+            self._stand_start_time = time.time()
+        elif new_state == RobotState.POLICY_CONTROL:
+            self.reset()
+
+    def _fsm_non_policy_step(self, env_data, ctrl_data, dry_run: bool):
+        if self._state == RobotState.PASSIVE:
+            if not dry_run:
+                self.env.step(self.policy.default_pos)
+        elif self._state == RobotState.FIXED_STAND:
+            if not dry_run:
+                self._step_fixed_stand()
+        elif self._state == RobotState.ESTOP:
+            if not dry_run:
+                self.env.step(self.policy.default_pos)
+            self._do_estop()
+            return
+
+        self._fsm_post_step(env_data, ctrl_data)
+
+    def _step_fixed_stand(self):
+        elapsed = time.time() - self._stand_start_time
+        alpha = min(elapsed / self.cfg.stand_duration, 1.0)
+        target = (1 - alpha) * self._stand_start_dof_pos + alpha * self.policy.default_pos
+        self.env.step(target)
+
+    def _do_estop(self):
+        logger.warning("[FSM] Emergency stop!")
+        if hasattr(self.env, "reborn"):
+            self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
+        else:
+            self.env.shutdown()
+        self._state = RobotState.PASSIVE
+
+    def _fsm_post_step(self, env_data, ctrl_data):
+        """Minimal post-step for non-policy states: timestep, ctrl update, safety check."""
+        self.timestep += 1
+        self.ctrl_manager.post_step_callback(ctrl_data)
+        self.safety_check()
 
     def prepare(self, init_motor_angle=None):
         if init_motor_angle is not None:
