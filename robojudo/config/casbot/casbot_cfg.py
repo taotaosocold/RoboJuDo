@@ -183,7 +183,7 @@ class casbot_beyondmimic(RlPipelineCfg):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fk_beyondmimic",
+        policy_name="fk",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,
@@ -209,8 +209,8 @@ class casbot_beyondmimic_real(RlPipelineCfg):
                 "leg_l1_joint", "leg_l2_joint", "leg_l3_joint", "leg_l4_joint", "leg_l5_joint", "leg_l6_joint",
                 # right leg
                 "leg_r1_joint", "leg_r2_joint", "leg_r3_joint", "leg_r4_joint", "leg_r5_joint", "leg_r6_joint",
-                # waist, head
-                "waist_yaw_joint", "head_yaw_joint", "head_pitch_joint",
+                # head, waist (must match WBC FSM order: head_yaw, head_pitch, waist_yaw)
+                "head_yaw_joint", "head_pitch_joint", "waist_yaw_joint",
                 # left arm
                 "left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint", "left_elbow_pitch_joint", "left_wrist_yaw_joint",
                 # right arm
@@ -231,7 +231,7 @@ class casbot_beyondmimic_real(RlPipelineCfg):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fk",
+        policy_name="A1-Stand_poses",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,
@@ -254,16 +254,16 @@ class casbot_beyondmimic_with_ctrl(RlPipelineCfg):
     ctrl: list[KeyboardCtrlCfg | CasbotBeyondmimicCtrlCfg] = [
         KeyboardCtrlCfg(),
         CasbotBeyondmimicCtrlCfg(
-            motion_name="dance1_subject2",
+            motion_name="118_01_poses",
         ),
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fallAndGetUp2_subject2_clip",
+        policy_name="policy",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=False,
-        max_timestep=515,
+        max_timestep=3000,
     )
 
 

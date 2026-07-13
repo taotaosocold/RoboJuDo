@@ -217,6 +217,13 @@ class RlPipeline(Pipeline):
         if new_state == RobotState.FIXED_STAND:
             self._stand_start_dof_pos = self.env.dof_pos.copy()
             self._stand_start_time = time.time()
+            print("=" * 80)
+            print(f"[FSM] FIXED_STAND target (default_pos), stand_duration={self.cfg.stand_duration}s")
+            for i, name in enumerate(self.env.joint_names):
+                cur = self._stand_start_dof_pos[i]
+                tgt = self.policy.default_pos[i]
+                print(f"  [{i:2d}] {name:40s} current={cur: 8.4f}  target={tgt: 8.4f}")
+            print("=" * 80)
         elif new_state == RobotState.POLICY_CONTROL:
             self.reset()
 

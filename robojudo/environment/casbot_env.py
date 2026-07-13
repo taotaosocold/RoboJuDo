@@ -169,11 +169,6 @@ class CasbotRealEnv(Environment):
                 [imu.orientation.x, imu.orientation.y, imu.orientation.z, imu.orientation.w],
                 dtype=np.float32,
             )
-            print("-" * 100)
-            print(imu.orientation.x)
-            print(imu.orientation.y)
-            print(imu.orientation,z)
-            print(imu.orientation.w)
             ang_vel = np.array(
                 [imu.angular_velocity.x, imu.angular_velocity.y, imu.angular_velocity.z],
                 dtype=np.float32,
