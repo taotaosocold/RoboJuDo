@@ -33,6 +33,37 @@ class CasbotRealEnv(Environment):
         if self._dof_idx is not None and len(self._dof_idx) != self.num_dofs:
             raise ValueError("joint2motor_idx length must match num_dofs")
 
+        # ---- name mapping: env (Casbot_25DoF descriptive) ↔ hl_motion (leg_l1 etc.) ----
+        self._env_to_hl_name: dict[str, str] = {}
+        self._hl_name_to_env_idx: dict[str, int] = {}
+        self._hl_to_env_perm: list[int] = []  # robot_idx → env_idx
+        self._env_to_hl_perm: list[int] = []  # env_idx → robot_idx
+
+        # Leg joint mapping: Casbot descriptive ↔ hl_motion naming
+        _leg_parts = ["pelvic_pitch", "pelvic_roll", "pelvic_yaw", "knee_pitch", "ankle_pitch", "ankle_roll"]
+        for i, part in enumerate(_leg_parts):
+            self._env_to_hl_name[f"left_leg_{part}_joint"] = f"leg_l{i+1}_joint"
+            self._env_to_hl_name[f"right_leg_{part}_joint"] = f"leg_r{i+1}_joint"
+        # Non-leg joints: same name in both systems
+        for name in self.joint_names:
+            if name not in self._env_to_hl_name:
+                self._env_to_hl_name[name] = name
+
+        # Reverse lookup
+        for env_name, hl_name in self._env_to_hl_name.items():
+            self._hl_name_to_env_idx[hl_name] = self.joint_names.index(env_name)
+
+        # Build permutation arrays
+        if self.hl_cfg.robot_joint_names:
+            for hl_name in self.hl_cfg.robot_joint_names:
+                self._hl_to_env_perm.append(self._hl_name_to_env_idx.get(hl_name, 0))
+            for env_name in self.joint_names:
+                hl_name = self._env_to_hl_name[env_name]
+                try:
+                    self._env_to_hl_perm.append(self.hl_cfg.robot_joint_names.index(hl_name))
+                except ValueError:
+                    self._env_to_hl_perm.append(0)
+
         # ---- ROS2 init ----
         if not rclpy.ok():
             rclpy.init()
@@ -61,9 +92,16 @@ class CasbotRealEnv(Environment):
         cmd_names = self.hl_cfg.robot_joint_names if self.hl_cfg.robot_joint_names else self.joint_names
         self._cmd_msg = JointState()
         self._cmd_msg.name = cmd_names
-        self._cmd_msg.position = [float(p) for p in self.default_pos]
         self._cmd_msg.velocity = [0.0] * self.num_dofs
         self._cmd_msg.effort = [0.0] * self.num_dofs
+        # Reorder default_pos from env order to robot order
+        if self.hl_cfg.robot_joint_names:
+            default_pos_robot = np.zeros(self.num_dofs, dtype=np.float64)
+            for env_i, robot_i in enumerate(self._env_to_hl_perm):
+                default_pos_robot[robot_i] = self.default_pos[env_i]
+            self._cmd_msg.position = [float(p) for p in default_pos_robot]
+        else:
+            self._cmd_msg.position = [float(p) for p in self.default_pos]
 
         self._joint_cmd_pub = self.node.create_publisher(
             JointState,
@@ -139,21 +177,16 @@ class CasbotRealEnv(Environment):
         # ---- joint positions / velocities ----
         js = self._latest_joint_state
         if js is not None:
-            msg_names = (
-                self.hl_cfg.robot_joint_names
-                if self.hl_cfg.robot_joint_names
-                else js.name
-            )
             name_to_idx = {n: i for i, n in enumerate(js.name)}
 
+            # Build dof_pos/vel in self.joint_names (Casbot_25DoF) order using name matching
             dof_pos = np.zeros(self.num_dofs, dtype=np.float32)
             dof_vel = np.zeros(self.num_dofs, dtype=np.float32)
 
-            for i, name in enumerate(msg_names):
-                if i >= self.num_dofs:
-                    break
-                if name in name_to_idx:
-                    idx = name_to_idx[name]
+            for i, env_name in enumerate(self.joint_names):
+                hl_name = self._env_to_hl_name.get(env_name, env_name)
+                if hl_name in name_to_idx:
+                    idx = name_to_idx[hl_name]
                     if idx < len(js.position):
                         dof_pos[i] = js.position[idx]
                     if idx < len(js.velocity):
@@ -197,7 +230,14 @@ class CasbotRealEnv(Environment):
     def step(self, pd_target, hand_pose=None):
         assert len(pd_target) == self.num_dofs
 
-        self._cmd_msg.position = [float(p) for p in pd_target]
+        # Reorder from env (Casbot_25DoF) order to robot (robot_joint_names) order
+        if self.hl_cfg.robot_joint_names:
+            pd_target_robot = np.zeros(self.num_dofs, dtype=np.float64)
+            for env_i, robot_i in enumerate(self._env_to_hl_perm):
+                pd_target_robot[robot_i] = pd_target[env_i]
+            self._cmd_msg.position = [float(p) for p in pd_target_robot]
+        else:
+            self._cmd_msg.position = [float(p) for p in pd_target]
 
         if self.enabled:
             self._joint_cmd_pub.publish(self._cmd_msg)

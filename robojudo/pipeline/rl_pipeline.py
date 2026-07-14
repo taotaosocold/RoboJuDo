@@ -105,6 +105,11 @@ class RlPipeline(Pipeline):
         self._state = RobotState.PASSIVE
         self._stand_start_dof_pos = None
         self._stand_start_time = 0.0
+        self._stand_target_pos = (
+            np.array(self.cfg.stand_target_pos)
+            if self.cfg.stand_target_pos is not None
+            else self.policy.default_pos
+        )
 
         self.self_check()
         self.reset()
@@ -214,23 +219,30 @@ class RlPipeline(Pipeline):
             return
         logger.info(f"[FSM] {self._state.value} → {new_state.value}")
         self._state = new_state
-        if new_state == RobotState.FIXED_STAND:
+        if new_state in (RobotState.PASSIVE, RobotState.FIXED_STAND):
             self._stand_start_dof_pos = self.env.dof_pos.copy()
             self._stand_start_time = time.time()
-            print("=" * 80)
-            print(f"[FSM] FIXED_STAND target (default_pos), stand_duration={self.cfg.stand_duration}s")
-            for i, name in enumerate(self.env.joint_names):
-                cur = self._stand_start_dof_pos[i]
-                tgt = self.policy.default_pos[i]
-                print(f"  [{i:2d}] {name:40s} current={cur: 8.4f}  target={tgt: 8.4f}")
-            print("=" * 80)
+            if new_state == RobotState.FIXED_STAND:
+                print("=" * 80)
+                print(f"[FSM] FIXED_STAND target, stand_duration={self.cfg.stand_duration}s")
+                for i, name in enumerate(self.env.joint_names):
+                    cur = self._stand_start_dof_pos[i]
+                    tgt = self._stand_target_pos[i]
+                    print(f"  [{i:2d}] {name:40s} current={cur: 8.4f}  target={tgt: 8.4f}")
+                print("=" * 80)
         elif new_state == RobotState.POLICY_CONTROL:
             self.reset()
 
     def _fsm_non_policy_step(self, env_data, ctrl_data, dry_run: bool):
         if self._state == RobotState.PASSIVE:
             if not dry_run:
-                self.env.step(self.policy.default_pos)
+                if self._stand_start_dof_pos is None:
+                    self._stand_start_dof_pos = self.env.dof_pos.copy()
+                    self._stand_start_time = time.time()
+                elapsed = time.time() - self._stand_start_time
+                alpha = min(elapsed / self.cfg.passive_duration, 1.0)
+                target = (1 - alpha) * self._stand_start_dof_pos  # smooth to zeros
+                self.env.step(target)
         elif self._state == RobotState.FIXED_STAND:
             if not dry_run:
                 self._step_fixed_stand()
@@ -245,7 +257,7 @@ class RlPipeline(Pipeline):
     def _step_fixed_stand(self):
         elapsed = time.time() - self._stand_start_time
         alpha = min(elapsed / self.cfg.stand_duration, 1.0)
-        target = (1 - alpha) * self._stand_start_dof_pos + alpha * self.policy.default_pos
+        target = (1 - alpha) * self._stand_start_dof_pos + alpha * self._stand_target_pos
         self.env.step(target)
 
     def _do_estop(self):

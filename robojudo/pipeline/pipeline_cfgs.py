@@ -30,7 +30,13 @@ class PipelineCfg(Config):
     When enabled, use [STATE_*] commands from controller triggers to switch states."""
 
     stand_duration: float = 2.0
-    """Duration (seconds) for the FIXED_STAND interpolation to default position."""
+    """Duration (seconds) for the FIXED_STAND interpolation to target position."""
+
+    passive_duration: float = 4.0
+    """Duration (seconds) for the PASSIVE interpolation to zeros."""
+
+    stand_target_pos: list[float] | None = None
+    """Custom target joint positions for FIXED_STAND. If None, uses policy default_pos."""
 
 
 class RlPipelineCfg(PipelineCfg):
