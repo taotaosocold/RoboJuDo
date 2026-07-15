@@ -13,7 +13,9 @@ class ConfigManager:
 
     def parse_config(self):
         # cfg_class = getattr(robojudo.config, self.config_name)
+        # 在__init__.py中已经初始化了这个注册函数，这里可以直接通过我们传入参数的g1_beyondmimic这个类名直接得到其类
         cfg_class = cfg_registry.get(self.config_name)
+        # 通过这个类去创建一个对象，并返回这个对象
         cfg_raw = cfg_class()
         # cfg_raw = make_g1_pipeline_cfg(
         #     env="g1_mujoco_env",

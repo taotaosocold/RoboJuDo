@@ -67,12 +67,13 @@ class RlPipeline(Pipeline):
 
     def __init__(self, cfg: RlPipelineCfg):
         super().__init__(cfg=cfg)
-
+        # 获得环境类名，因为g1_beyondmimic是仿真环境，这里应该是MujocoEnv
         env_class: type[Environment] = getattr(robojudo.environment, self.cfg.env.env_type)
+        # 传入的配置部分只有环境的部分即self.cfg.env是G1MujocoEnvCfg，self.env是MujocoEnv
         self.env: Environment = env_class(cfg_env=self.cfg.env, device=self.device)
 
         self.ctrl_manager = CtrlManager(cfg_ctrls=self.cfg.ctrl, env=self.env, device=self.device)
-
+        # 传入参数G1BeyondMimicPolicyCfg和
         self.policy = PolicyWrapper(
             cfg_policy=self.cfg.policy,
             env_dof_cfg=self.env.dof_cfg,
@@ -84,8 +85,9 @@ class RlPipeline(Pipeline):
 
         self.freq = self.cfg.policy.freq
         self.dt = 1.0 / self.freq
-
+        # 先跑10步看看是否存在通道上的问题，如果没问题
         self.self_check()
+        # 如果检查已经没问题了，然后在重新reset到默认位置
         self.reset()
 
     def self_check(self):
@@ -113,9 +115,11 @@ class RlPipeline(Pipeline):
                 self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 self.env.shutdown()
-
+    # 后处理
     def post_step_callback(self, env_data, ctrl_data, extras, pd_target):
+        # 帧计数+1
         self.timestep += 1
+        # 处理ctrl命令
         commands = ctrl_data.get("COMMANDS", [])
         for command in commands:
             match command:
@@ -132,7 +136,7 @@ class RlPipeline(Pipeline):
         self.policy.post_step_callback(commands)
         if self.visualizer is not None:
             self.policy.debug_viz(self.visualizer, env_data, ctrl_data, extras)
-
+        # 再一次安全检测，如果检测到机器人倾倒，就触发关机
         self.safety_check()
         if self.cfg.debug.log_obs:
             self.debug_logger.log(
@@ -142,7 +146,7 @@ class RlPipeline(Pipeline):
                 pd_target=pd_target,
                 timestep=self.timestep,
             )
-
+    # 只有在self_check和prepare的时候才会dry_run为true也就是初始化RlPipeline的时候
     def step(self, dry_run=False):
         self.env.update()
         env_data = self.env.get_data()
@@ -155,7 +159,7 @@ class RlPipeline(Pipeline):
 
         obs, extras = self.policy.get_observation(env_data, ctrl_data)
         pd_target = self.policy.get_pd_target(obs)
-
+        # 如果是在自检测是不会去让环境去步进的
         if not dry_run:
             self.env.step(pd_target, extras.get("hand_pose", None))
 

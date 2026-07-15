@@ -16,19 +16,24 @@ logger = logging.getLogger(__name__)
 @env_registry.register
 class MujocoEnv(Environment):
     cfg_env: MujocoEnvCfg
-
+    # 在g1_beyondmimic中其cfg_env是G1MujocoEnvCfg，这个类又是继承MujocoEnvCfg(在env_cfgs.py脚本中)
     def __init__(self, cfg_env: MujocoEnvCfg, device="cpu"):
         super().__init__(cfg_env=cfg_env, device=device)
-
+        # 获得仿真持续时间，为60s
         self.sim_duration = cfg_env.sim_duration
+        # 0.001s
         self.sim_dt = cfg_env.sim_dt
+        # 20
         self.sim_decimation = cfg_env.sim_decimation
+        # 为0.02s
         self.control_dt = self.sim_dt * self.sim_decimation
-
+        # 获得xml构建机器人
         self.model = mujoco.MjModel.from_xml_path(cfg_env.xml)  # pyright: ignore[reportAttributeAccessIssue]
         self.model.opt.timestep = self.sim_dt
         self.data = mujoco.MjData(self.model)  # pyright: ignore[reportAttributeAccessIssue]
         # mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
+        # 刚导入xml的时候，self.data是只有机器人qpos全0的值，这里通过前向运动学以及机器人的各个连杆和其父连杆的关系去计算每个点的全部全局位置。
+        # 这一步step相当于去更新/初始化传感器数据和self.data的其他数据
         mujoco.mj_step(self.model, self.data)  # pyright: ignore[reportAttributeAccessIssue]
 
         self.viewer = mujoco_viewer.MujocoViewer(
@@ -50,7 +55,7 @@ class MujocoEnv(Environment):
             self.visualizer = None
 
         self.last_time = time.time()
-
+        # 这一步也是，先给每个全局变量先赋值一下机器人默认全0状态的数据
         self.update()  # get initial state
 
     def reborn(self, init_qpos=None):
@@ -87,7 +92,7 @@ class MujocoEnv(Environment):
         """simple: only update dof pos & vel"""
         dof_pos = self.data.qpos.astype(np.float32)[-self.num_dofs :]
         dof_vel = self.data.qvel.astype(np.float32)[-self.num_dofs :]
-
+        # 在update函数中实际更新的是self._dof_pos而不是self.dof_pos，但是其实在env_cfgs.py中self.dof_pos是一个@property返回的就是self._dof_pos的副本，所以更新这个也可以
         self._dof_pos = dof_pos.copy()
         self._dof_vel = dof_vel.copy()
 
@@ -118,7 +123,7 @@ class MujocoEnv(Environment):
             self._torso_ang_vel = fk_info[self._torso_name]["ang_vel"]
             self._torso_quat = fk_info[self._torso_name]["quat"]
             self._torso_pos = fk_info[self._torso_name]["pos"]
-
+    # 环境接受力矩执行步进，循环执行20次PD
     def step(self, pd_target, hand_pose=None):
         assert len(pd_target) == self.num_dofs, "pd_target len should be num_dofs of env"
 
@@ -136,6 +141,7 @@ class MujocoEnv(Environment):
             self.data.ctrl = torque
 
             mujoco.mj_step(self.model, self.data)  # pyright: ignore[reportAttributeAccessIssue]
+            # 每一次PD后都要update去更新self.dof_pos即机器人的关节到达了什么位置
             self.update(simple=True)
         self.update(simple=False)
 
