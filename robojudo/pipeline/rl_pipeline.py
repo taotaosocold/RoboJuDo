@@ -71,7 +71,7 @@ class RlPipeline(Pipeline):
         env_class: type[Environment] = getattr(robojudo.environment, self.cfg.env.env_type)
         # 传入的配置部分只有环境的部分即self.cfg.env是G1MujocoEnvCfg，self.env是MujocoEnv
         self.env: Environment = env_class(cfg_env=self.cfg.env, device=self.device)
-
+        # 初始化控制器管理者，这里传入的配置cfg.ctrl是KeyboardCtrlCfg
         self.ctrl_manager = CtrlManager(cfg_ctrls=self.cfg.ctrl, env=self.env, device=self.device)
         # 传入参数G1BeyondMimicPolicyCfg和
         self.policy = PolicyWrapper(
@@ -130,9 +130,9 @@ class RlPipeline(Pipeline):
                     if hasattr(self.env, "reborn"):
                         logger.warning("Simulation Env reborn!")
                         self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
-
+        # 这句话几乎其实没执行什么，是在后面才处理硬件上传的命令
         self.ctrl_manager.post_step_callback(ctrl_data)
-
+        # 这句话才真正去处理硬件上传的命令
         self.policy.post_step_callback(commands)
         if self.visualizer is not None:
             self.policy.debug_viz(self.visualizer, env_data, ctrl_data, extras)
@@ -150,9 +150,11 @@ class RlPipeline(Pipeline):
     def step(self, dry_run=False):
         self.env.update()
         env_data = self.env.get_data()
-
+        # 这个ctrl_data就是获取了硬件上传的信息，比如ctrl_data送来的数据长这样
+        # {'KeyboardCtrl': {'keyboard_event': [{'type': 'keyboard', 'name': '|', 'pressed': True, 'timestamp': 1784105755.7599852}]}, 'COMMANDS': []}
+        # 就是表示获得的是一个键盘的信息，然后是我们按了一个'|'这个键
         ctrl_data = self.ctrl_manager.get_ctrl_data(env_data)
-
+        # 获取commands的数据，这个就是根据ctrl_data送来的数据去KeyBoard的配置查trigger表发现'|'对应'[MOTION_RESET]'
         commands = ctrl_data.get("COMMANDS", [])
         if len(commands) > 0:
             logger.info(f"{'=' * 10} COMMANDS {'=' * 10}\n{commands}")

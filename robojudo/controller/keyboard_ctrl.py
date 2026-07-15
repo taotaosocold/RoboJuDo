@@ -14,6 +14,7 @@ class KeyboardCtrl(Controller):
         super().__init__(cfg_ctrl=cfg_ctrl, env=env, **kwargs)
 
         self.event_queue = Queue(maxsize=100)
+        # 这个是生产者线程，这个线程持续监听键盘输入，每次按键事件到达就put进event_queue，消费者则是get_ctrl_data()函数
         self.keyboard_thread = KeyboardThread(self.event_queue)
         self.keyboard_thread.start()
 
