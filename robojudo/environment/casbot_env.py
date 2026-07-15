@@ -33,41 +33,31 @@ class CasbotRealEnv(Environment):
         if self._dof_idx is not None and len(self._dof_idx) != self.num_dofs:
             raise ValueError("joint2motor_idx length must match num_dofs")
 
-        # ---- name mapping: env (Casbot_25DoF descriptive) ↔ hl_motion (leg_l1 etc.) ----
-        self._env_to_hl_name: dict[str, str] = {}
-        self._hl_name_to_env_idx: dict[str, int] = {}
-        self._hl_to_env_perm: list[int] = []  # robot_idx → env_idx
-        self._env_to_hl_perm: list[int] = []  # env_idx → robot_idx
-
-        # Leg joint mapping: Casbot descriptive ↔ hl_motion naming
+        # ---- name mapping: env (Casbot_25DoF) ↔ hl_motion (leg_l1 etc.) ----
         _leg_parts = ["pelvic_pitch", "pelvic_roll", "pelvic_yaw", "knee_pitch", "ankle_pitch", "ankle_roll"]
+        _env_to_hl_name: dict[str, str] = {}
         for i, part in enumerate(_leg_parts):
-            self._env_to_hl_name[f"left_leg_{part}_joint"] = f"leg_l{i+1}_joint"
-            self._env_to_hl_name[f"right_leg_{part}_joint"] = f"leg_r{i+1}_joint"
-        # Non-leg joints: same name in both systems
-        for name in self.joint_names:
-            if name not in self._env_to_hl_name:
-                self._env_to_hl_name[name] = name
+            _env_to_hl_name[f"left_leg_{part}_joint"] = f"leg_l{i+1}_joint"
+            _env_to_hl_name[f"right_leg_{part}_joint"] = f"leg_r{i+1}_joint"
 
-        # Reverse lookup
-        for env_name, hl_name in self._env_to_hl_name.items():
-            self._hl_name_to_env_idx[hl_name] = self.joint_names.index(env_name)
+        # Precompute hl_motion names for update() name matching in /joint_states
+        # self.joint_names就是Casbot_25Dof的顺序以及名称，也就是mujoco的顺序
+        # 而这里self._joint_state_names也是Casbot_25Dof的顺序，只是名称变成了left_l1_joint这样和message的情况
+        self._joint_state_names: list[str] = [
+            _env_to_hl_name.get(name, name) for name in self.joint_names
+        ]
 
-        # Build permutation arrays
-        if self.hl_cfg.robot_joint_names:
-            for hl_name in self.hl_cfg.robot_joint_names:
-                self._hl_to_env_perm.append(self._hl_name_to_env_idx.get(hl_name, 0))
-            for env_name in self.joint_names:
-                hl_name = self._env_to_hl_name[env_name]
-                try:
-                    self._env_to_hl_perm.append(self.hl_cfg.robot_joint_names.index(hl_name))
-                except ValueError:
-                    self._env_to_hl_perm.append(0)
+        # Auto-compute joint2motor_idx from robot_joint_names if not explicitly given
+        if self._dof_idx is None and self.hl_cfg.robot_joint_names is not None:
+            self._dof_idx = [
+                self.hl_cfg.robot_joint_names.index(_env_to_hl_name.get(name, name))
+                for name in self.joint_names
+            ]
 
         # ---- ROS2 init ----
         if not rclpy.ok():
             rclpy.init()
-
+        # 创建节点
         self.node = Node("robojudo_casbot")
 
         # ---- state storage ----
@@ -75,6 +65,7 @@ class CasbotRealEnv(Environment):
         self._latest_imu = None
 
         # ---- subscribers ----
+        # 给节点创建订阅者，一旦收到信息执行回调函数self._js_callback
         self._joint_state_sub = self.node.create_subscription(
             JointState,
             self.hl_cfg.joint_state_topic,
@@ -94,14 +85,7 @@ class CasbotRealEnv(Environment):
         self._cmd_msg.name = cmd_names
         self._cmd_msg.velocity = [0.0] * self.num_dofs
         self._cmd_msg.effort = [0.0] * self.num_dofs
-        # Reorder default_pos from env order to robot order
-        if self.hl_cfg.robot_joint_names:
-            default_pos_robot = np.zeros(self.num_dofs, dtype=np.float64)
-            for env_i, robot_i in enumerate(self._env_to_hl_perm):
-                default_pos_robot[robot_i] = self.default_pos[env_i]
-            self._cmd_msg.position = [float(p) for p in default_pos_robot]
-        else:
-            self._cmd_msg.position = [float(p) for p in self.default_pos]
+        self._cmd_msg.position = [float(p) for p in self._default_pos_robot_order()]
 
         self._joint_cmd_pub = self.node.create_publisher(
             JointState,
@@ -109,18 +93,16 @@ class CasbotRealEnv(Environment):
             10,
         )
 
-        # ---- background publish timer (50Hz safety net) ----
-        self._cmd_timer = self.node.create_timer(
-            self.hl_cfg.control_dt,
-            self._timer_callback,
-        )
-
         # ---- spin thread ----
+        # 添加线程执行器
         self._executor = MultiThreadedExecutor()
+        # 给线程执行器添加节点
         self._executor.add_node(self.node)
+        # 为节点添加线程，这个线程就是那两个订阅者，持续监听收取信息
         self._spin_thread = threading.Thread(
             target=self._executor.spin, daemon=True, name="ros2_spin"
         )
+        # 开启线程
         self._spin_thread.start()
 
         # ---- born place alignment ----
@@ -136,12 +118,6 @@ class CasbotRealEnv(Environment):
 
     def _imu_callback(self, msg):
         self._latest_imu = msg
-
-    def _timer_callback(self):
-        """Background 50Hz safety send."""
-        if not self.enabled:
-            return
-        self._joint_cmd_pub.publish(self._cmd_msg)
 
     # ---- Environment interface ----
 
@@ -174,26 +150,16 @@ class CasbotRealEnv(Environment):
             logger.info("[CasbotRealEnv] Successfully connected to robot")
 
     def update(self):
-        # ---- joint positions / velocities ----
         js = self._latest_joint_state
         if js is not None:
-            name_to_idx = {n: i for i, n in enumerate(js.name)}
-
-            # Build dof_pos/vel in self.joint_names (Casbot_25DoF) order using name matching
-            dof_pos = np.zeros(self.num_dofs, dtype=np.float32)
-            dof_vel = np.zeros(self.num_dofs, dtype=np.float32)
-
-            for i, env_name in enumerate(self.joint_names):
-                hl_name = self._env_to_hl_name.get(env_name, env_name)
-                if hl_name in name_to_idx:
-                    idx = name_to_idx[hl_name]
-                    if idx < len(js.position):
-                        dof_pos[i] = js.position[idx]
-                    if idx < len(js.velocity):
-                        dof_vel[i] = js.velocity[idx]
-
-            self._dof_pos = dof_pos
-            self._dof_vel = dof_vel
+            # 这里获得消息js里的数据，是字典类型为{名称:值}
+            name_to_pos = dict(zip(js.name, js.position))
+            name_to_vel = dict(zip(js.name, js.velocity))
+            # 这里self._joint_state_names已经是mujoco的顺序并且是消息类型的名称，所以这里直接通过名字映射将消息的顺序映射为mujoco即Casbot_25Dof的顺序
+            for i, hl_name in enumerate(self._joint_state_names):
+                if hl_name in name_to_pos:
+                    self._dof_pos[i] = float(name_to_pos[hl_name])
+                    self._dof_vel[i] = float(name_to_vel[hl_name])
 
         # ---- IMU ----
         imu = self._latest_imu
@@ -230,23 +196,28 @@ class CasbotRealEnv(Environment):
     def step(self, pd_target, hand_pose=None):
         assert len(pd_target) == self.num_dofs
 
-        # Reorder from env (Casbot_25DoF) order to robot (robot_joint_names) order
-        if self.hl_cfg.robot_joint_names:
-            pd_target_robot = np.zeros(self.num_dofs, dtype=np.float64)
-            for env_i, robot_i in enumerate(self._env_to_hl_perm):
-                pd_target_robot[robot_i] = pd_target[env_i]
-            self._cmd_msg.position = [float(p) for p in pd_target_robot]
+        if self._dof_idx is not None:
+            for env_i, robot_i in enumerate(self._dof_idx):
+                self._cmd_msg.position[robot_i] = float(pd_target[env_i])
         else:
             self._cmd_msg.position = [float(p) for p in pd_target]
 
         if self.enabled:
             self._joint_cmd_pub.publish(self._cmd_msg)
 
+    def _default_pos_robot_order(self):
+        """Return default_pos reordered to robot (robot_joint_names) order."""
+        if self._dof_idx is not None:
+            pos = np.zeros(self.num_dofs, dtype=np.float64)
+            for env_i, robot_i in enumerate(self._dof_idx):
+                pos[robot_i] = self.default_pos[env_i]
+            return pos
+        return self.default_pos
+
     def shutdown(self):
         self.enabled = False
 
-        # send default position a few times
-        self._cmd_msg.position = [float(p) for p in self.default_pos]
+        self._cmd_msg.position = [float(p) for p in self._default_pos_robot_order()]
         for _ in range(5):
             self._joint_cmd_pub.publish(self._cmd_msg)
             time.sleep(0.02)

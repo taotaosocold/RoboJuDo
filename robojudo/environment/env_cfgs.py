@@ -54,6 +54,19 @@ class RobotEnvCfg(EnvCfg):
         return self
 
 
+class CasbotHlCfg(Config):
+    """HL Robot ROS2 communication config."""
+
+    joint_cmd_topic: str = "/motion/joint_cmd"
+    joint_state_topic: str = "/joint_states"
+    imu_topic: str = "/imu"
+    upper_cmd_topic: str = "/upper/joint_cmd"
+
+    robot_joint_names: list[str] | None = None
+    """Joint names in robot SDK order. Used for outgoing /motion/joint_cmd ordering.
+    When None, env joint_names are used directly (robot and RoboJuDo share the same naming)."""
+
+
 class UnitreeEnvCfg(RobotEnvCfg):
     """
     Configuration for Unitree Robot environment.
