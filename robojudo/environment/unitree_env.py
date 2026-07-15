@@ -384,7 +384,7 @@ class UnitreeEnv(Environment):
 
         self.left_hand_cmd_publisher.Write(self.left_hand_cmd)
         self.right_hand_cmd_publisher.Write(self.right_hand_cmd)
-
+    # 这里获得的commands是mujoco的顺序了
     def control_joints(self, commands, hand_pose=None):
         if not self.enabled:
             return
@@ -401,8 +401,10 @@ class UnitreeEnv(Environment):
             if self._dof_idx is None:
                 motor_idx = j
             else:
+                # self._dof_idx就是joint2motor_idx
                 motor_idx = self._dof_idx[j]
             command = commands[j]
+            # 这里的配置是为了对其消息类型的关节数据
             if j not in self._control_joint_idx:
                 self.set_cmd_i(i=motor_idx, command=0, control_type=self._control_mode)
             else:

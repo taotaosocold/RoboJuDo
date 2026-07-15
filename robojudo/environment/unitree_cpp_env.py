@@ -21,17 +21,19 @@ class UnitreeCppEnv(Environment):
         self.enabled: bool = cfg_env.act
         super().__init__(cfg_env=cfg_env, device=device)
         self.RemoteControllerHandler = None
-
+        # 根据环境对机器人的配置项去获得配置类
         cfg_unitree: UnitreeEnvCfg.UnitreeCfg = cfg_env.unitree
 
         cfg_unitree_dict: dict = cfg_unitree.to_dict()
+        # 填写其他信息
         cfg_unitree_dict["num_dofs"] = self.num_dofs
         cfg_unitree_dict["stiffness"] = self.stiffness
         cfg_unitree_dict["damping"] = self.damping
-
+        # 机器人类型，g1还是h1
         self.robot = cfg_unitree.robot
         self._dof_idx = cfg_env.joint2motor_idx
         self._odometry_type = cfg_env.odometry_type
+        # 如果这里外部里程计去使用双目摄像头去估计状态则会开启
         if self._odometry_type == "ZED":
             assert self.cfg_env.zed_cfg is not None, "zed_cfg must be set if odometry_type is 'ZED'"
             from robojudo.tools.zed_odometry import ZedOdometry
@@ -52,7 +54,7 @@ class UnitreeCppEnv(Environment):
 
         self.sport_state: SportState = None  # pyright: ignore[reportAttributeAccessIssue]
         self.robot_state: RobotState = None  # pyright: ignore[reportAttributeAccessIssue]
-
+        # 创建C++控制器类
         self.unitree = UnitreeController(cfg_unitree_dict)
 
         # born place alignment extra for h1 torso
@@ -163,8 +165,10 @@ class UnitreeCppEnv(Environment):
         #     logger.warning(f"JOINT out of LIMIT-> {delta}")
 
         # positions = pd_target_clipped
+        # 所要到达的目标
         positions = pd_target
         if self.enabled:
+            # 将目标发给C++控制器
             self.unitree.step(positions.tolist())
 
         if hand_pose is not None:

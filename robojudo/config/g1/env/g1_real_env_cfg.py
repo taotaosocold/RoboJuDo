@@ -14,15 +14,17 @@ class G1UnitreeCfg(UnitreeEnvCfg.UnitreeCfg):
 
     enable_odometry: bool = True
 
-
+# 如果走实机则几乎都是选择这个配置
 class G1RealEnvCfg(G1EnvCfg, UnitreeEnvCfg):
     # env_type: str = UnitreeEnvCfg.model_fields["env_type"].default
+    # 默认的环境类名是UnitreeCppEnv而不是UnitreeEnv
     env_type: str = "UnitreeCppEnv"
     # ====== ENV CONFIGURATION ======
     unitree: UnitreeEnvCfg.UnitreeCfg = G1UnitreeCfg(
         net_if="eth0",
     )
-
+    # 实机跑的时候，G1是没法直接测出身体在世界坐标系下的位置和线速度的，所以需要外部里程计来估算base_pos和base_lin_vel
+    # 这里有四个选择，NONE就是不用，则base_pos和base_lin_vel始终为0，DUMMY是假里程计即返回固定值，UNITREE是宇树用SDK内部的状态估计，ZED是用双目相机作视觉里程计（SLAM）
     odometry_type: Literal["NONE", "DUMMY", "UNITREE", "ZED"] = "UNITREE"
 
     joint2motor_idx: list[int] | None = None  # list(range(0, 29))

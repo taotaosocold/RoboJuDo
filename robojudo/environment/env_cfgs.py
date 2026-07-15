@@ -58,7 +58,7 @@ class UnitreeEnvCfg(RobotEnvCfg):
     """
     Configuration for Unitree Robot environment.
     """
-
+    # 这里会定义各种topic话题的名称
     class UnitreeCfg(Config):
         """Unitree SDK configuration"""
 
