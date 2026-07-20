@@ -104,7 +104,7 @@ class RlPipeline(Pipeline):
         self._fsm_enabled = self.cfg.fsm_enabled
         self._state = RobotState.PASSIVE
         self._stand_start_dof_pos = None
-        self._stand_start_time = 0.0
+        self._transition_step = 0
         self._stand_target_pos = (
             np.array(self.cfg.stand_target_pos)
             if self.cfg.stand_target_pos is not None
@@ -131,14 +131,25 @@ class RlPipeline(Pipeline):
     def safety_check(self):
         if not self.do_safety_check:
             return
+        # check joint velocity
+        if self.cfg.dof_vel_limit is not None:
+            max_vel = np.max(np.abs(self.env.dof_vel))
+            if max_vel > self.cfg.dof_vel_limit:
+                logger.error(f"Joint velocity {max_vel:.1f} rad/s exceeds limit {self.cfg.dof_vel_limit}! Shutdown.")
+                self._shutdown_or_reborn()
+                return
+        # check robot orientation
         gravity_ori = get_gravity_orientation(self.env.base_quat)
         angle = np.arccos(np.clip(-gravity_ori[2], -1.0, 1.0))
         if abs(angle) > 1.0:  # more than ~57 degrees
             logger.error("Robot fallen! Shutdown for safety.")
-            if hasattr(self.env, "reborn"):
-                self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
-            else:
-                self.env.shutdown()
+            self._shutdown_or_reborn()
+
+    def _shutdown_or_reborn(self):
+        if hasattr(self.env, "reborn"):
+            self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
+        else:
+            self.env.shutdown()
 
     def post_step_callback(self, env_data, ctrl_data, extras, pd_target):
         self.timestep += 1
@@ -178,7 +189,7 @@ class RlPipeline(Pipeline):
         commands = ctrl_data.get("COMMANDS", [])
         if len(commands) > 0:
             logger.info(f"{'=' * 10} COMMANDS {'=' * 10}\n{commands}")
-
+        # 状态机的切换放在策略执行之前，这样如果不是POLICY_CONTROL即策略控制下是不会走下面的代码的
         if self._fsm_enabled:
             self._fsm_handle_commands(commands)
             if self._state != RobotState.POLICY_CONTROL:
@@ -199,8 +210,10 @@ class RlPipeline(Pipeline):
     # ---- FSM methods ----
 
     def _fsm_handle_commands(self, commands: list[str]):
+        # 从硬件中读取我们是想要切到哪种状态，command会给出比如[STATE_PASSIVE]的期望状态
         for command in commands:
             match command:
+                # 会通过_fsm_transition对切入不同的状态做不同的预处理
                 case "[STATE_PASSIVE]":
                     self._fsm_transition(RobotState.PASSIVE)
                 case "[STATE_FIXED_STAND]":
@@ -215,37 +228,53 @@ class RlPipeline(Pipeline):
                         self.env.reborn()  # pyright: ignore[reportAttributeAccessIssue]
 
     def _fsm_transition(self, new_state: RobotState):
+        # 如果已经在目标状态就直接返回
         if new_state == self._state:
             return
         logger.info(f"[FSM] {self._state.value} → {new_state.value}")
         self._state = new_state
+        # 如果是进入PASSIVE或FIXED_STAND状态这里会对_stand_start_dof_pos和_stand_start_dof_pos重新赋值
         if new_state in (RobotState.PASSIVE, RobotState.FIXED_STAND):
             self._stand_start_dof_pos = self.env.dof_pos.copy()
-            self._stand_start_time = time.time()
+            self._transition_step = 0
             if new_state == RobotState.FIXED_STAND:
                 print("=" * 80)
-                print(f"[FSM] FIXED_STAND target, stand_duration={self.cfg.stand_duration}s")
+                print(
+                    "[FSM] FIXED_STAND target, "
+                    f"stand_transition_steps={self.cfg.stand_transition_steps}"
+                )
                 for i, name in enumerate(self.env.joint_names):
                     cur = self._stand_start_dof_pos[i]
                     tgt = self._stand_target_pos[i]
                     print(f"  [{i:2d}] {name:40s} current={cur: 8.4f}  target={tgt: 8.4f}")
                 print("=" * 80)
+        # 如果是进入策略，那么timestep会清0，重置policy等
         elif new_state == RobotState.POLICY_CONTROL:
             self.reset()
+    # 走非策略的代码比如passive或者fixedstand
+    def _step_interpolate(self, target_pos: np.ndarray, transition_steps: int):
+        """Linearly interpolate to target_pos in an exact number of control steps."""
+        if transition_steps <= 0:
+            raise ValueError(f"transition_steps must be positive, got {transition_steps}")
+        if self._stand_start_dof_pos is None:
+            self._stand_start_dof_pos = self.env.dof_pos.copy()
+            self._transition_step = 0
+        self._transition_step += 1
+        alpha = min(self._transition_step / transition_steps, 1.0)
+        target = (1 - alpha) * self._stand_start_dof_pos + alpha * target_pos
+        self.env.step(target)
 
     def _fsm_non_policy_step(self, env_data, ctrl_data, dry_run: bool):
         if self._state == RobotState.PASSIVE:
             if not dry_run:
-                if self._stand_start_dof_pos is None:
-                    self._stand_start_dof_pos = self.env.dof_pos.copy()
-                    self._stand_start_time = time.time()
-                elapsed = time.time() - self._stand_start_time
-                alpha = min(elapsed / self.cfg.passive_duration, 1.0)
-                target = (1 - alpha) * self._stand_start_dof_pos  # smooth to zeros
-                self.env.step(target)
+                self._step_interpolate(
+                    np.zeros(self.env.num_dofs), self.cfg.passive_transition_steps
+                )
         elif self._state == RobotState.FIXED_STAND:
             if not dry_run:
-                self._step_fixed_stand()
+                self._step_interpolate(
+                    self._stand_target_pos, self.cfg.stand_transition_steps
+                )
         elif self._state == RobotState.ESTOP:
             if not dry_run:
                 self.env.step(self.policy.default_pos)
@@ -253,12 +282,6 @@ class RlPipeline(Pipeline):
             return
 
         self._fsm_post_step(env_data, ctrl_data)
-
-    def _step_fixed_stand(self):
-        elapsed = time.time() - self._stand_start_time
-        alpha = min(elapsed / self.cfg.stand_duration, 1.0)
-        target = (1 - alpha) * self._stand_start_dof_pos + alpha * self._stand_target_pos
-        self.env.step(target)
 
     def _do_estop(self):
         logger.warning("[FSM] Emergency stop!")

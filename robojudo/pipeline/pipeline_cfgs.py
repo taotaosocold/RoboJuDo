@@ -25,15 +25,21 @@ class PipelineCfg(Config):
     We recommend enabling this, however if motion is very aggressive, you may disable it.
     """
 
+    dof_vel_limit: float | None = None
+    """
+    Maximum allowed joint velocity (rad/s). If any joint exceeds this, shutdown/reborn.
+    None means disabled. Recommended: 30.0 for real robot, None for sim.
+    """
+
     fsm_enabled: bool = False
     """Enable the robot state machine (PASSIVE → FIXED_STAND → POLICY_CONTROL).
     When enabled, use [STATE_*] commands from controller triggers to switch states."""
 
-    stand_duration: float = 2.0
-    """Duration (seconds) for the FIXED_STAND interpolation to target position."""
+    stand_transition_steps: int = 100
+    """Control steps used to linearly reach the FIXED_STAND target."""
 
-    passive_duration: float = 4.0
-    """Duration (seconds) for the PASSIVE interpolation to zeros."""
+    passive_transition_steps: int = 200
+    """Control steps used to linearly reach the PASSIVE target."""
 
     stand_target_pos: list[float] | None = None
     """Custom target joint positions for FIXED_STAND. If None, uses policy default_pos."""

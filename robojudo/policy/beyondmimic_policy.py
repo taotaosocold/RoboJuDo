@@ -209,8 +209,6 @@ class BeyondMimicPolicy(Policy):
                 obs_last_action,
             ]
         )
-        print("-" * 100)
-        print(obs_joint_pos_rel)
         obs = obs_prop
         extras = {
             "pos": pos,
