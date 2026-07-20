@@ -98,7 +98,7 @@ class MujocoEnv(Environment):
 
         if simple:
             return
-
+        # 将读过来的四元数转化为xyzw的形式
         quat = self.data.qpos.astype(np.float32)[3:7][[1, 2, 3, 0]]
         ang_vel = self.data.qvel.astype(np.float32)[3:6]
         base_pos = self.data.qpos.astype(np.float32)[:3]
@@ -116,11 +116,12 @@ class MujocoEnv(Environment):
 
         self._base_pos = base_pos.copy()
         self._base_lin_vel = lin_vel.copy()
-
+        # 执行前向运动学，根位置是base_pos和base_quat
         if self.update_with_fk:
             fk_info = self.fk()
             self._fk_info = fk_info.copy()
             self._torso_ang_vel = fk_info[self._torso_name]["ang_vel"]
+            # 这个四元数很重要，最后得到的并且进入的四元数是_torso_quat而不是base_quat，也是xyzw的形式
             self._torso_quat = fk_info[self._torso_name]["quat"]
             self._torso_pos = fk_info[self._torso_name]["pos"]
     # 环境接受力矩执行步进，循环执行20次PD

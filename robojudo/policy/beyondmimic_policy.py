@@ -94,8 +94,9 @@ class BeyondMimicPolicy(Policy):
 
             # motion init2anchor alignment
             anchor_pos_w_init = command_init["body_pos_w"][self.motion_anchor_body_index, :]
+            # 将四元数从wxyz转化为xyzw的形式
             anchor_quat_w_init = command_init["body_quat_w"][self.motion_anchor_body_index, :][[1, 2, 3, 0]]
-
+            # 这里要求输入的四元数是xyzw的形式，输出的四元数也是xyzw的形式
             self.command_init_align = TransformAlignment(
                 quat=anchor_quat_w_init, pos=anchor_pos_w_init, yaw_only=True, xy_only=True
             )

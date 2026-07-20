@@ -29,6 +29,7 @@ class Environment(ABC):
         self._dof_pos = np.zeros(self.num_dofs)
         self._dof_vel = np.zeros(self.num_dofs)
         self._base_rpy = np.zeros(3)
+        # 获得的四元数默认为xyzw
         self._base_quat = np.array([0.0, 0.0, 0.0, 1.0])  # as x, y, z, w
         self._base_ang_vel = np.zeros(3)
 
