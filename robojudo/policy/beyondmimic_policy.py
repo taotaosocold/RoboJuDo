@@ -210,6 +210,18 @@ class BeyondMimicPolicy(Policy):
             ]
         )
         obs = obs_prop
+        observation_components = {
+            "command": obs_command,
+            "motion_anchor_pos_b": (
+                obs_motion_anchor_pos_b if not self.without_state_estimator else np.array([])
+            ),
+            "motion_anchor_ori_b": obs_motion_anchor_ori_b,
+            "base_lin_vel": obs_base_lin_vel if not self.without_state_estimator else np.array([]),
+            "base_ang_vel": obs_base_ang_vel,
+            "joint_pos_rel": obs_joint_pos_rel,
+            "joint_vel_rel": obs_joint_vel_rel,
+            "last_action": obs_last_action,
+        }
         extras = {
             "pos": pos,
             "ori": ori,
@@ -218,6 +230,7 @@ class BeyondMimicPolicy(Policy):
             "anchor_pos_w": anchor_pos_w,
             "anchor_quat_w": anchor_quat_w,
             "command": command,
+            "observation_components": observation_components,
             "hand_pose": hand_pose,
             "CALLBACK": ["[MOTION_DONE]"] if self.flag_motion_done else [],
         }

@@ -191,23 +191,35 @@ class casbot_beyondmimic(RlPipelineCfg):
     )
 
     fsm_enabled: bool = True
-    do_safety_check: bool = True
+    do_safety_check: bool = False
+    # stand_target_pos: list[float] = [  # FK model first frame (fk), Casbot_25DoF order
+    #     # left leg
+    #     -0.1010930389, 0.1863300502, 0.1534859538, 0.1218007132, -0.0273471251, 0.0,
+    #     # right leg
+    #     -0.1159527600, -0.1466802061, -0.1086166725, 0.1400099695, 0.0167938694, 0.0,
+    #     # waist_yaw, head_yaw, head_pitch
+    #     -0.0127099706, -0.0008552494, 0.0,
+    #     # left arm
+    #     -0.0597212315, 0.7225397229, -0.0980680510, -0.2135050893, -0.0890462548,
+    #     # right arm
+    #     -0.0829682425, -0.8226424456, 0.0251893010, -0.1944101751, 0.1169776917,
+    # ]
     stand_target_pos: list[float] = [  # FK model first frame (fk), Casbot_25DoF order
         # left leg
-        -0.1010930389, 0.1863300502, 0.1534859538, 0.1218007132, -0.0273471251, 0.0,
+        0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
         # right leg
-        -0.1159527600, -0.1466802061, -0.1086166725, 0.1400099695, 0.0167938694, 0.0,
+        0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
         # waist_yaw, head_yaw, head_pitch
-        -0.0127099706, -0.0008552494, 0.0,
+        0.0, 0.0, 0.0,
         # left arm
-        -0.0597212315, 0.7225397229, -0.0980680510, -0.2135050893, -0.0890462548,
+        0.0, 0.0, 0.0, 0.0, 0.0,
         # right arm
-        -0.0829682425, -0.8226424456, 0.0251893010, -0.1944101751, 0.1169776917,
+        0.0, 0.0, 0.0, 0.0, 0.0,
     ]
 
 # export PYTHONPATH=/home/casbot/Desktop/RoboJuDo:$PYTHONPATH
 @cfg_registry.register
-class casbot_beyondmimic_real(RlPipelineCfg):
+class casbot_beyondmimic_real(casbot_beyondmimic):
     """
     Casbot BeyondMimic Policy on real robot via hl_motion ROS2 SDK.
     Run with: python scripts/run_pipeline.py -c casbot_beyondmimic_real
@@ -264,6 +276,18 @@ class casbot_beyondmimic_real(RlPipelineCfg):
         # right arm
         -0.0829682425, -0.8226424456, 0.0251893010, -0.1944101751, 0.1169776917,
     ]
+    # stand_target_pos: list[float] = [  # FK model first frame (fk), Casbot_25DoF order
+    #     # left leg
+    #     0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+    #     # right leg
+    #     0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+    #     # waist_yaw, head_yaw, head_pitch
+    #     0.0, 0.0, 0.0,
+    #     # left arm
+    #     0.0, 0.0, 0.0, 0.0, 0.0,
+    #     # right arm
+    #     0.0, 0.0, 0.0, 0.0, 0.0,
+    # ]
 
 
 @cfg_registry.register
@@ -278,14 +302,14 @@ class casbot_beyondmimic_with_ctrl(RlPipelineCfg):
     ctrl: list[KeyboardCtrlCfg | CasbotBeyondmimicCtrlCfg] = [
         KeyboardCtrlCfg(),
         CasbotBeyondmimicCtrlCfg(
-            motion_name="118_01_poses",
+            motion_name="fk",
         ),
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="policy",
+        policy_name="fk_beyondmimic",
         without_state_estimator=True,
-        use_modelmeta_config=True,
+        use_modelmeta_config=False,
         use_motion_from_model=False,
         max_timestep=3000,
     )
