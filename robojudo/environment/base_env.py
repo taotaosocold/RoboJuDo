@@ -43,7 +43,9 @@ class Environment(ABC):
         self._fk_info: dict | None = None
 
         # born place alignment
+        # 是否要在开局的时候对齐朝向
         self.born_place_align = self.cfg_env.born_place_align
+        # 这里默认是yaw_only和xy_only都为True，表示只对齐yaw和xy平面位置
         self.base_align = TransformAlignment(yaw_only=True, xy_only=True)
 
         self.visualizer = None  # for sim viz debug plot
