@@ -58,8 +58,8 @@ class CasbotHlCfg(Config):
     """HL Robot ROS2 communication config."""
 
     joint_cmd_topic: str = "/motion/joint_cmd"
-    joint_state_topic: str = "/joint_states"
-    imu_topic: str = "/imu"
+    joint_state_topic: str = "/motion/joint_state"
+    imu_topic: str = "/motion/imu"
     upper_cmd_topic: str = "/upper/joint_cmd"
 
     robot_joint_names: list[str] | None = None

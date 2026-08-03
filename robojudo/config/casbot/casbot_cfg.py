@@ -183,11 +183,12 @@ class casbot_beyondmimic(RlPipelineCfg):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fk_beyondmimic",
+        policy_name="fk",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,
-        max_timestep=300,
+        max_timestep=8000,
+        action_beta=1.0,
     )
 
     fsm_enabled: bool = True
@@ -206,15 +207,15 @@ class casbot_beyondmimic(RlPipelineCfg):
     # ]
     stand_target_pos: list[float] = [  # FK model first frame (fk), Casbot_25DoF order
         # left leg
-        0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+        0.01, 0.02, 0.03, 0.04, 0.05, 0.06,
         # right leg
-        0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+        0.07, 0.08, 0.09, 0.1, 0.11, 0.12,
         # waist_yaw, head_yaw, head_pitch
-        0.0, 0.0, 0.0,
+        0.01, 0.02, 0.03,
         # left arm
-        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.01, 0.02, 0.03, 0.04, 0.05,
         # right arm
-        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.06, 0.07, 0.08, 0.09, 0.1,
     ]
 
 # export PYTHONPATH=/home/casbot/Desktop/RoboJuDo:$PYTHONPATH
@@ -255,7 +256,7 @@ class casbot_beyondmimic_real(casbot_beyondmimic):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fk_beyondmimic",
+        policy_name="dance1_subject1",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,
@@ -278,15 +279,15 @@ class casbot_beyondmimic_real(casbot_beyondmimic):
     ]
     # stand_target_pos: list[float] = [  # FK model first frame (fk), Casbot_25DoF order
     #     # left leg
-    #     0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+    #     0.01, 0.02, 0.03, 0.04, 0.05, 0.06,
     #     # right leg
-    #     0.0, 0.0, 0.0, 0.5, 0.3, 0.0,
+    #     0.07, 0.08, 0.09, 0.1, 0.11, 0.12,
     #     # waist_yaw, head_yaw, head_pitch
-    #     0.0, 0.0, 0.0,
+    #     0.01, 0.02, 0.03,
     #     # left arm
-    #     0.0, 0.0, 0.0, 0.0, 0.0,
+    #     0.01, 0.02, 0.03, 0.04, 0.05,
     #     # right arm
-    #     0.0, 0.0, 0.0, 0.0, 0.0,
+    #     0.06, 0.07, 0.08, 0.09, 0.1,
     # ]
 
 

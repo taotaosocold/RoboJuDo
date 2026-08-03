@@ -172,8 +172,8 @@ class g1_beyondmimic(RlPipelineCfg):
     ]
 
     policy: G1BeyondMimicPolicyCfg = G1BeyondMimicPolicyCfg(
-        policy_name="dance1_subject2",
-        without_state_estimator=False,
+        policy_name="Jump_wose",
+        without_state_estimator=True,
         use_modelmeta_config=True,  # use robot dof config from modelmeta
         use_motion_from_model=True,  # use motion from onnx model
         max_timestep=5000,

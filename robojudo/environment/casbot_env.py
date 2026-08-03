@@ -29,6 +29,7 @@ class CasbotRealEnv(Environment):
 
         self.hl_cfg = cfg_env.hl
         self._dof_idx = cfg_env.joint2motor_idx
+        self._waist_yaw_idx = self.joint_names.index("waist_yaw_joint")
 
         if self._dof_idx is not None and len(self._dof_idx) != self.num_dofs:
             raise ValueError("joint2motor_idx length must match num_dofs")
@@ -36,6 +37,7 @@ class CasbotRealEnv(Environment):
         # ---- name mapping: env (Casbot_25DoF) ↔ hl_motion (leg_l1 etc.) ----
         _leg_parts = ["pelvic_pitch", "pelvic_roll", "pelvic_yaw", "knee_pitch", "ankle_pitch", "ankle_roll"]
         _env_to_hl_name: dict[str, str] = {}
+        # 这里_env_to_hl_name是一个字典，键是Casbot_25DoF的名称，值是hl_motion的名称
         for i, part in enumerate(_leg_parts):
             _env_to_hl_name[f"left_leg_{part}_joint"] = f"leg_l{i+1}_joint"
             _env_to_hl_name[f"right_leg_{part}_joint"] = f"leg_r{i+1}_joint"
@@ -48,6 +50,7 @@ class CasbotRealEnv(Environment):
         ]
 
         # Auto-compute joint2motor_idx from robot_joint_names if not explicitly given
+        # 这里robot_joint_names的顺序就是hl_motion的消息顺序，是由casbot_cfg中定义的顺序，这里就是将mujoco的顺序换成消息顺序
         if self._dof_idx is None and self.hl_cfg.robot_joint_names is not None:
             self._dof_idx = [
                 self.hl_cfg.robot_joint_names.index(_env_to_hl_name.get(name, name))
@@ -80,6 +83,7 @@ class CasbotRealEnv(Environment):
         )
 
         # ---- publishers ----
+        # 这里cmd_names的顺序其实就是casbot_cfg的robot_joint_names的顺序
         cmd_names = self.hl_cfg.robot_joint_names if self.hl_cfg.robot_joint_names else self.joint_names
         self._cmd_msg = JointState()
         self._cmd_msg.name = cmd_names
@@ -118,6 +122,28 @@ class CasbotRealEnv(Environment):
 
     def _imu_callback(self, msg):
         self._latest_imu = msg
+
+    @staticmethod
+    def _transform_anchor_imu_to_base(
+        waist_yaw: float,
+        waist_yaw_vel: float,
+        anchor_quat: np.ndarray,
+        anchor_ang_vel: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Transform waist_yaw_link IMU state into the floating-base frame.
+
+        Quaternions use the project convention [x, y, z, w]. The IMU axes
+        are assumed to coincide with the waist_yaw_link axes.
+        """
+        base_to_anchor = sRot.from_euler("z", waist_yaw)
+        base_quat = (sRot.from_quat(anchor_quat) * base_to_anchor.inv()).as_quat()
+
+        # The IMU angular velocity is expressed in the anchor frame. Remove
+        # the waist joint contribution, then express the remainder in base.
+        base_ang_vel = base_to_anchor.apply(
+            anchor_ang_vel - np.array([0.0, 0.0, waist_yaw_vel], dtype=np.float32)
+        )
+        return base_quat, base_ang_vel
 
     # ---- Environment interface ----
 
@@ -164,21 +190,35 @@ class CasbotRealEnv(Environment):
         # ---- IMU ----
         imu = self._latest_imu
         if imu is not None:
-            quat = np.array(
+            # The Casbot IMU is mounted on waist_yaw_link, which is also the
+            # BeyondMimic torso/anchor, so use its data directly for torso.
+            torso_quat = np.array(
                 [imu.orientation.x, imu.orientation.y, imu.orientation.z, imu.orientation.w],
                 dtype=np.float32,
             )
-            ang_vel = np.array(
+            torso_ang_vel = np.array(
                 [imu.angular_velocity.x, imu.angular_velocity.y, imu.angular_velocity.z],
                 dtype=np.float32,
             )
 
-            if self.born_place_align:
-                quat = self.base_align.align_quat(quat)
+            waist_yaw = float(self._dof_pos[self._waist_yaw_idx])
+            waist_yaw_vel = float(self._dof_vel[self._waist_yaw_idx])
+            base_quat, base_ang_vel = self._transform_anchor_imu_to_base(
+                waist_yaw=waist_yaw,
+                waist_yaw_vel=waist_yaw_vel,
+                anchor_quat=torso_quat,
+                anchor_ang_vel=torso_ang_vel,
+            )
 
-            self._base_quat = quat
-            self._base_ang_vel = ang_vel
-            self._base_rpy = sRot.from_quat(quat).as_euler("xyz")
+            if self.born_place_align:
+                base_quat = self.base_align.align_quat(base_quat)
+                torso_quat = self.base_align.align_quat(torso_quat)
+
+            self._torso_quat = torso_quat
+            self._torso_ang_vel = torso_ang_vel
+            self._base_quat = base_quat
+            self._base_ang_vel = base_ang_vel
+            self._base_rpy = sRot.from_quat(base_quat).as_euler("xyz")
 
         # ---- odometry ----
         if self._base_pos is None:
@@ -190,8 +230,10 @@ class CasbotRealEnv(Environment):
         if self.update_with_fk:
             fk_info = self.fk()
             self._torso_pos = fk_info[self._torso_name]["pos"]
-            self._torso_quat = fk_info[self._torso_name]["quat"]
-            self._torso_ang_vel = fk_info[self._torso_name]["ang_vel"]
+            # Before the first IMU message, use FK as a temporary fallback.
+            if imu is None:
+                self._torso_quat = fk_info[self._torso_name]["quat"]
+                self._torso_ang_vel = fk_info[self._torso_name]["ang_vel"]
 
     def step(self, pd_target, hand_pose=None):
         assert len(pd_target) == self.num_dofs
