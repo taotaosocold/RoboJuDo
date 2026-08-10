@@ -115,6 +115,34 @@ class UnitreeWoGaitPolicyCfg(PolicyCfg):
     ]
 
 
+class LocomotionPolicyCfg(PolicyCfg):
+    class ObsScalesCfg(Config):
+        ang_vel: float = 0.2
+        dof_vel: float = 0.05
+        command: list[float] = [1.0, 1.0, 1.0]
+
+    policy_type: str = "LocomotionPolicy"
+    policy_name: str = "policy"
+    disable_autoload: bool = True
+
+    @property
+    def policy_file(self) -> str:
+        policy_file = ASSETS_DIR / f"models/{self.robot}/locomotion/{self.policy_name}.onnx"
+        return policy_file.as_posix()
+
+    obs_scales: ObsScalesCfg = ObsScalesCfg()
+    max_cmd: list[float] = [1.5, 1.5, 1.0]
+    command_step: float = 0.1
+    commands_map: list[list[float]] = [
+        [-1.0, 0.0, 1.0],
+        [1.0, 0.0, -1.0],
+        [1.0, 0.0, -1.0],
+    ]
+
+    action_scales: list[float]
+    use_height_scan: bool = True
+
+
 class SmoothPolicyCfg(PolicyCfg):
     class ObsScalesCfg(Config):
         ang_vel: float = 0.25

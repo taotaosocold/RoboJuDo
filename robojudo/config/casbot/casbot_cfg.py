@@ -28,6 +28,7 @@ from .policy.g1_amo_policy_cfg import G1AmoPolicyCfg  # noqa: F401
 from .policy.g1_asap_policy_cfg import G1AsapLocoPolicyCfg, G1AsapPolicyCfg  # noqa: F401
 from .policy.g1_beyondmimic_policy_cfg import G1BeyondMimicPolicyCfg, G1BeyondMimicResidualPolicyCfg  # noqa: F401
 from .policy.casbot_beyondmimic_policy_cfg import CasbotBeyondMimicPolicyCfg, CasbotBeyondMimicResidualPolicyCfg  # noqa: F401
+from .policy.casbot_locomotion_policy_cfg import CasbotLocomotionPolicyCfg  # noqa: F401
 from .policy.g1_h2h_policy_cfg import G1H2HPolicyCfg  # noqa: F401
 from .policy.g1_kungfubot_policy_cfg import G1KungfuBotGeneralPolicyCfg, G1KungfuBotPolicyCfg  # noqa: F401
 from .policy.g1_smooth_policy_cfg import G1SmoothPolicyCfg  # noqa: F401
@@ -164,6 +165,20 @@ class g1_h2h(RlPipelineCfg):
 
 
 @cfg_registry.register
+class casbot_locomotion(RlPipelineCfg):
+    robot: str = "casbot"
+    env: CasbotMujocoEnvCfg = CasbotMujocoEnvCfg(use_height_scan=True)
+    ctrl: list[JoystickCtrlCfg | KeyboardCtrlCfg] = [
+        JoystickCtrlCfg(),
+        KeyboardCtrlCfg(),
+    ]
+    policy: CasbotLocomotionPolicyCfg = CasbotLocomotionPolicyCfg(
+        policy_name="policy",
+        use_height_scan=True,
+    )
+
+
+@cfg_registry.register
 class casbot_beyondmimic(RlPipelineCfg):
     """
     Casbot BeyondMimic Policy, motion embedded in onnx (use_motion_from_model=True).
@@ -183,7 +198,7 @@ class casbot_beyondmimic(RlPipelineCfg):
     ]
 
     policy: CasbotBeyondMimicPolicyCfg = CasbotBeyondMimicPolicyCfg(
-        policy_name="fk",
+        policy_name="fallAndGetUp2_subject2_clip_0.75scale_with_head_kp_kd_no_collison",
         without_state_estimator=True,
         use_modelmeta_config=True,
         use_motion_from_model=True,

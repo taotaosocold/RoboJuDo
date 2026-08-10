@@ -108,10 +108,23 @@ class JoystickThread(Thread):
         dpad_config = self.config.get("dpad_config", {})
         dpad_as_button = dpad_config.get("as_button_event", True)
         dpad_state = {key: False for key in dpad_config.get("dpad_map", {}).keys()}
+        dpad_axes = {"LeftX": 0.0, "LeftY": 0.0}
 
-        axis_map = axis_config.get("axis_map", {})
+        axis_map = axis_config.get("axis_map", {}).copy()
         axis_range = axis_config.get("axis_range", {})
         invert = set(axis_config.get("invert", []))
+        num_axes = joystick.get_numaxes()
+        if num_axes == 4:
+            axis_map = {
+                "LeftX": 0,
+                "LeftY": 1,
+                "RightX": 3,
+                "RightY": 2,
+            }
+            logger.info("[Joystick] Using 4-axis controller mapping")
+        unavailable_axes = [name for name, index in axis_map.items() if index >= num_axes]
+        if unavailable_axes:
+            logger.warning(f"[Joystick] Unavailable axes will stay at zero: {unavailable_axes}")
 
         clock = pygame.time.Clock()
         last_state_time = time.time()
@@ -136,6 +149,8 @@ class JoystickThread(Thread):
                     )
 
                 elif event.type == pygame.JOYHATMOTION:
+                    dpad_axes["LeftX"] = float(event.value[0])
+                    dpad_axes["LeftY"] = float(event.value[1])
                     if dpad_as_button:
                         dpad_state_new = {
                             name: event.value[axis] == direction
@@ -163,13 +178,20 @@ class JoystickThread(Thread):
 
             # Axes update at fixed rate
             if now - last_state_time >= state_interval:
-                axes_state = {}
+                axes_state = {name: 0.0 for name in axis_map}
                 for name, index in axis_map.items():
+                    if index >= num_axes:
+                        continue
                     val = joystick.get_axis(index)
                     if name in invert:
                         val = -val
                     val = self.normalize_axis(axis_range, name, val)
                     axes_state[name] = val
+
+                # Logitech's Mode button can swap the left stick and D-pad.
+                if dpad_axes["LeftX"] != 0.0 or dpad_axes["LeftY"] != 0.0:
+                    axes_state["LeftX"] = dpad_axes["LeftX"]
+                    axes_state["LeftY"] = dpad_axes["LeftY"]
 
                 while self.state_queue.full():
                     self.state_queue.get()

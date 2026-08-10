@@ -29,6 +29,7 @@ from .policy.g1_kungfubot_policy_cfg import G1KungfuBotGeneralPolicyCfg, G1Kungf
 from .policy.g1_smooth_policy_cfg import G1SmoothPolicyCfg  # noqa: F401
 from .policy.g1_twist_policy_cfg import G1TwistPolicyCfg  # noqa: F401
 from .policy.g1_unitree_policy_cfg import G1UnitreePolicyCfg, G1UnitreeWoGaitPolicyCfg  # noqa: F401
+from .policy.casbot_locomotion_policy_cfg import CasbotLocomotionPolicyCfg  # noqa: F401
 
 # ======================== Custom Configs ======================== #
 """

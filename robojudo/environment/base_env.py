@@ -40,6 +40,7 @@ class Environment(ABC):
         self._torso_quat: np.ndarray | None = None
         self._torso_ang_vel: np.ndarray | None = None
         self._fk_info: dict | None = None
+        self._height_scan: np.ndarray | None = None
 
         # born place alignment
         self.born_place_align = self.cfg_env.born_place_align
@@ -158,6 +159,10 @@ class Environment(ABC):
     def fk_info(self):
         return self._fk_info.copy() if self._fk_info is not None else None
 
+    @property
+    def height_scan(self):
+        return self._height_scan.copy() if self._height_scan is not None else None
+
     def get_data(self):
         env_data = {
             "dof_pos": self.dof_pos,
@@ -172,5 +177,6 @@ class Environment(ABC):
             "torso_quat": self.torso_quat,
             "torso_ang_vel": self.torso_ang_vel,
             "fk_info": self.fk_info,
+            "height_scan": self.height_scan,
         }
         return Box(env_data)

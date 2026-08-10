@@ -28,6 +28,10 @@ class MujocoEnv(Environment):
         self.model = mujoco.MjModel.from_xml_path(cfg_env.xml)  # pyright: ignore[reportAttributeAccessIssue]
         self.model.opt.timestep = self.sim_dt
         self.data = mujoco.MjData(self.model)  # pyright: ignore[reportAttributeAccessIssue]
+
+        self.use_height_scan = cfg_env.use_height_scan
+        if self.use_height_scan:
+            self._init_height_scan()
         # mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
         mujoco.mj_step(self.model, self.data)  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -99,6 +103,9 @@ class MujocoEnv(Environment):
         base_pos = self.data.qpos.astype(np.float32)[:3]
         lin_vel = self.data.qvel.astype(np.float32)[0:3]
 
+        if self.use_height_scan:
+            self._update_height_scan(base_pos, quat)
+
         if self.born_place_align:
             quat, base_pos = self.base_align.align_transform(quat, base_pos)
 
@@ -118,6 +125,55 @@ class MujocoEnv(Environment):
             self._torso_ang_vel = fk_info[self._torso_name]["ang_vel"]
             self._torso_quat = fk_info[self._torso_name]["quat"]
             self._torso_pos = fk_info[self._torso_name]["pos"]
+
+    def _init_height_scan(self):
+        size_x, size_y = self.cfg_env.height_scan_size
+        resolution = self.cfg_env.height_scan_resolution
+
+        x = np.linspace(-size_x / 2, size_x / 2, round(size_x / resolution) + 1)
+        y = np.linspace(-size_y / 2, size_y / 2, round(size_y / resolution) + 1)
+        grid_x, grid_y = np.meshgrid(x, y)
+        self.height_scan_points = np.stack([grid_x.ravel(), grid_y.ravel()], axis=-1)
+
+        # Keep world geoms in visible group 0 and move robot geoms to group 1,
+        # so rays only scan terrain without hiding it in the viewer.
+        self.height_scan_geom_group = 0
+        world_geom_ids = np.flatnonzero(self.model.geom_bodyid == 0)
+        robot_geom_ids = np.flatnonzero(self.model.geom_bodyid != 0)
+        self.model.geom_group[world_geom_ids] = self.height_scan_geom_group
+        self.model.geom_group[robot_geom_ids] = 1
+        self.height_scan_geom_mask = np.zeros(6, dtype=np.uint8)
+        self.height_scan_geom_mask[self.height_scan_geom_group] = 1
+        self.height_scan_geomid = np.zeros(1, dtype=np.int32)
+
+    def _update_height_scan(self, base_pos, base_quat):
+        yaw = quatToEuler(base_quat)[2]
+        cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+        rotation = np.array([[cos_yaw, -sin_yaw], [sin_yaw, cos_yaw]])
+        points_w = self.height_scan_points @ rotation.T + base_pos[:2]
+
+        scan = np.zeros((len(points_w), 3), dtype=np.float32)
+        scan[:, :2] = self.height_scan_points
+        ray = np.array([0.0, 0.0, -1.0])
+        ray_height = 20.0
+        z_min, z_max = self.cfg_env.height_scan_z_clip
+
+        for index, point_w in enumerate(points_w):
+            origin = np.array([point_w[0], point_w[1], base_pos[2] + ray_height])
+            distance = mujoco.mj_ray(
+                self.model,
+                self.data,
+                origin,
+                ray,
+                self.height_scan_geom_mask,
+                1,
+                -1,
+                self.height_scan_geomid,
+            )
+            scan[index, 2] = z_min if distance < 0 else origin[2] - distance - base_pos[2]
+
+        scan[:, 2] = np.clip(scan[:, 2], z_min, z_max)
+        self._height_scan = scan.ravel()
 
     def step(self, pd_target, hand_pose=None):
         assert len(pd_target) == self.num_dofs, "pd_target len should be num_dofs of env"

@@ -194,14 +194,11 @@ class RlPipeline(Pipeline):
             self._fsm_handle_commands(commands)
             if self._state != RobotState.POLICY_CONTROL:
                 if dry_run:
-                    obs, extras = self.policy.get_observation(env_data, ctrl_data)
-                    self._print_dry_run_observation(obs, extras)
+                    self.policy.get_observation(env_data, ctrl_data)
                 self._fsm_non_policy_step(env_data, ctrl_data, dry_run)
                 return
 
         obs, extras = self.policy.get_observation(env_data, ctrl_data)
-        if dry_run:
-            self._print_dry_run_observation(obs, extras)
         # For residual action mode: extract motion reference joint_pos from ctrl_data
         beyondmimic_ctrl_data = ctrl_data.get("BeyondMimicCtrl", None)
         motion_joint_pos = beyondmimic_ctrl_data.get("joint_pos", None) if beyondmimic_ctrl_data is not None else None
@@ -211,23 +208,6 @@ class RlPipeline(Pipeline):
             self.env.step(pd_target, extras.get("hand_pose", None))
 
         self.post_step_callback(env_data, ctrl_data, extras, pd_target)
-
-    def _print_dry_run_observation(self, obs: np.ndarray, extras: dict):
-        """Print the exact observation immediately before policy inference."""
-        print("=" * 100)
-        print(f"[DRY RUN OBS] state={self._state.value}, shape={obs.shape}")
-        components = extras.get("observation_components")
-        if components is not None:
-            for name, value in components.items():
-                value_array = np.asarray(value)
-                print(f"[{name}] shape={value_array.shape}")
-                print(value_array)
-        else:
-            print("[obs] (policy did not provide named observation components)")
-            print(obs)
-        print(f"[full_obs] shape={obs.shape}")
-        print(obs)
-        print("=" * 100)
 
     # ---- FSM methods ----
 

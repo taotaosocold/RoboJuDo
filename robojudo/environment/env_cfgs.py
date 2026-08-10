@@ -36,6 +36,11 @@ class MujocoEnvCfg(EnvCfg):
 
     visualize_extras: bool = True  # TODO: remove
 
+    use_height_scan: bool = False
+    height_scan_size: list[float] = [1.6, 1.0]
+    height_scan_resolution: float = 0.05
+    height_scan_z_clip: list[float] = [-1.2, 0.0]
+
 
 class RobotEnvCfg(EnvCfg):
     env_type: str = "DummyEnv"
