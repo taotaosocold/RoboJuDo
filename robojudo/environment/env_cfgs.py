@@ -39,7 +39,12 @@ class MujocoEnvCfg(EnvCfg):
     use_height_scan: bool = False
     height_scan_size: list[float] = [1.6, 1.0]
     height_scan_resolution: float = 0.05
-    height_scan_z_clip: list[float] = [-1.2, 0.0]
+    height_scan_z_clip: list[float] = [-20.0, 20.0]
+    height_scan_body: str | None = None
+    """Body at the center of the yaw-aligned scan. None uses the floating base."""
+
+    terrain_stl: str | None = None
+    """Optional static STL injected into the MuJoCo world at its authored coordinates."""
 
 
 class RobotEnvCfg(EnvCfg):

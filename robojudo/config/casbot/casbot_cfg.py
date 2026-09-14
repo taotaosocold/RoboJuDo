@@ -1,4 +1,4 @@
-from robojudo.config import cfg_registry
+from robojudo.config import ASSETS_DIR, cfg_registry
 from robojudo.controller.ctrl_cfgs import (
     JoystickCtrlCfg,  # noqa: F401
     KeyboardCtrlCfg,  # noqa: F401
@@ -12,6 +12,10 @@ from robojudo.pipeline.pipeline_cfgs import (
 
 from .ctrl.g1_beyondmimic_ctrl_cfg import G1BeyondmimicCtrlCfg  # noqa: F401
 from .ctrl.casbot_beyondmimic_ctrl_cfg import CasbotBeyondmimicCtrlCfg  # noqa: F401
+from .ctrl.casbot_parkour_ctrl_cfg import CasbotParkourCtrlCfg  # noqa: F401
+from .ctrl.casbot_parkour_diffusion_ctrl_cfg import (  # noqa: F401
+    CasbotParkourDiffusionCtrlCfg,
+)
 from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
     G1MotionCtrlCfg,
     G1MotionH2HCtrlCfg,
@@ -21,6 +25,7 @@ from .ctrl.g1_motion_ctrl_cfg import (  # noqa: F401
 from .ctrl.g1_twist_redis_ctrl_cfg import G1TwistRedisCtrlCfg  # noqa: F401
 from .env.g1_dummy_env_cfg import G1DummyEnvCfg  # noqa: F401
 from .env.casbot_mujuco_env_cfg import CasbotMujocoEnvCfg  # noqa: F401
+from .env.casbot_parkour_mujoco_env_cfg import CasbotParkourMujocoEnvCfg  # noqa: F401
 from .env.casbot_real_env_cfg import CasbotHlCfg, CasbotRealEnvCfg  # noqa: F401
 from .env.g1_mujuco_env_cfg import G1MujocoEnvCfg  # noqa: F401
 from .env.g1_real_env_cfg import G1RealEnvCfg, G1UnitreeCfg  # noqa: F401
@@ -28,6 +33,7 @@ from .policy.g1_amo_policy_cfg import G1AmoPolicyCfg  # noqa: F401
 from .policy.g1_asap_policy_cfg import G1AsapLocoPolicyCfg, G1AsapPolicyCfg  # noqa: F401
 from .policy.g1_beyondmimic_policy_cfg import G1BeyondMimicPolicyCfg, G1BeyondMimicResidualPolicyCfg  # noqa: F401
 from .policy.casbot_beyondmimic_policy_cfg import CasbotBeyondMimicPolicyCfg, CasbotBeyondMimicResidualPolicyCfg  # noqa: F401
+from .policy.casbot_parkour_policy_cfg import CasbotParkourPolicyCfg  # noqa: F401
 from .policy.casbot_locomotion_policy_cfg import CasbotLocomotionPolicyCfg  # noqa: F401
 from .policy.g1_h2h_policy_cfg import G1H2HPolicyCfg  # noqa: F401
 from .policy.g1_kungfubot_policy_cfg import G1KungfuBotGeneralPolicyCfg, G1KungfuBotPolicyCfg  # noqa: F401
@@ -232,6 +238,52 @@ class casbot_beyondmimic(RlPipelineCfg):
         # right arm
         0.06, 0.07, 0.08, 0.09, 0.1,
     ]
+
+
+@cfg_registry.register
+class casbot_parkour(RlPipelineCfg):
+    """CASBOT Parkour policy with one external motion and aligned STL terrain."""
+
+    robot: str = "casbot"
+    env: CasbotParkourMujocoEnvCfg = CasbotParkourMujocoEnvCfg()
+    ctrl: list[KeyboardCtrlCfg | CasbotParkourCtrlCfg] = [
+        KeyboardCtrlCfg(
+            triggers_extra={
+                "1": "[STATE_PASSIVE]",
+                "2": "[STATE_FIXED_STAND]",
+                "3": "[STATE_POLICY]",
+                "0": "[STATE_ESTOP]",
+            },
+        ),
+        CasbotParkourCtrlCfg(),
+    ]
+    policy: CasbotParkourPolicyCfg = CasbotParkourPolicyCfg()
+
+    fsm_enabled: bool = False
+    do_safety_check: bool = False
+
+
+@cfg_registry.register
+class casbot_diffusion_parkour(RlPipelineCfg):
+    """CASBOT Parkour with online terrain/velocity-conditioned Flow Matching."""
+
+    robot: str = "casbot"
+    env: CasbotParkourMujocoEnvCfg = CasbotParkourMujocoEnvCfg(
+        xml=(
+            ASSETS_DIR
+            / "robots/casbot_skeleton/casbot_skeleton_25dof_rev_1_0_scene2.xml"
+        ).as_posix()
+    )
+    ctrl: list[KeyboardCtrlCfg | CasbotParkourDiffusionCtrlCfg] = [
+        KeyboardCtrlCfg(),
+        CasbotParkourDiffusionCtrlCfg(),
+    ]
+    policy: CasbotParkourPolicyCfg = CasbotParkourPolicyCfg(
+        command_source="ParkourDiffusionCtrl"
+    )
+
+    fsm_enabled: bool = False
+    do_safety_check: bool = True
 
 # export PYTHONPATH=/home/casbot/Desktop/RoboJuDo:$PYTHONPATH
 @cfg_registry.register

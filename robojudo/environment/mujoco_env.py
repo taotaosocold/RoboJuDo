@@ -1,5 +1,8 @@
 import logging
+import os
+import tempfile
 import time
+import xml.etree.ElementTree as ET
 
 import mujoco
 import mujoco_viewer
@@ -25,7 +28,7 @@ class MujocoEnv(Environment):
         self.sim_decimation = cfg_env.sim_decimation
         self.control_dt = self.sim_dt * self.sim_decimation
 
-        self.model = mujoco.MjModel.from_xml_path(cfg_env.xml)  # pyright: ignore[reportAttributeAccessIssue]
+        self.model = self._load_model(cfg_env)
         self.model.opt.timestep = self.sim_dt
         self.data = mujoco.MjData(self.model)  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -56,6 +59,50 @@ class MujocoEnv(Environment):
         self.last_time = time.time()
 
         self.update()  # get initial state
+
+    @staticmethod
+    def _load_model(cfg_env: MujocoEnvCfg):
+        if cfg_env.terrain_stl is None:
+            return mujoco.MjModel.from_xml_path(cfg_env.xml)  # pyright: ignore[reportAttributeAccessIssue]
+
+        if not os.path.isfile(cfg_env.terrain_stl):
+            raise FileNotFoundError(f"Terrain STL not found: {cfg_env.terrain_stl}")
+
+        tree = ET.parse(cfg_env.xml)
+        root = tree.getroot()
+        asset = root.find("asset")
+        worldbody = root.find("worldbody")
+        if asset is None or worldbody is None:
+            raise ValueError(f"{cfg_env.xml} must contain <asset> and <worldbody>")
+
+        compiler = root.find("compiler")
+        if compiler is not None and compiler.get("meshdir"):
+            meshdir = compiler.get("meshdir")
+            if meshdir is not None and not os.path.isabs(meshdir):
+                compiler.set("meshdir", os.path.abspath(os.path.join(os.path.dirname(cfg_env.xml), meshdir)))
+
+        ET.SubElement(asset, "mesh", name="parkour_terrain_mesh", file=os.path.abspath(cfg_env.terrain_stl))
+        ET.SubElement(
+            worldbody,
+            "geom",
+            name="parkour_terrain",
+            type="mesh",
+            mesh="parkour_terrain_mesh",
+            rgba="0.75 0.32 0.12 1",
+            contype="1",
+            conaffinity="1",
+            condim="3",
+            friction="1.0 0.005 0.0001",
+            group="0",
+        )
+
+        temp_xml = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
+        temp_xml.close()
+        try:
+            tree.write(temp_xml.name, encoding="utf-8", xml_declaration=True)
+            return mujoco.MjModel.from_xml_path(temp_xml.name)  # pyright: ignore[reportAttributeAccessIssue]
+        finally:
+            os.unlink(temp_xml.name)
 
     def reborn(self, init_qpos=None):
         if init_qpos is not None:
@@ -104,7 +151,17 @@ class MujocoEnv(Environment):
         lin_vel = self.data.qvel.astype(np.float32)[0:3]
 
         if self.use_height_scan:
-            self._update_height_scan(base_pos, quat)
+            scan_pos = base_pos
+            scan_quat = quat
+            if self.cfg_env.height_scan_body is not None:
+                body_id = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_BODY, self.cfg_env.height_scan_body
+                )
+                if body_id < 0:
+                    raise ValueError(f"Height scan body not found: {self.cfg_env.height_scan_body}")
+                scan_pos = self.data.xpos[body_id].astype(np.float32)
+                scan_quat = self.data.xquat[body_id].astype(np.float32)[[1, 2, 3, 0]]
+            self._update_height_scan(scan_pos, scan_quat)
 
         if self.born_place_align:
             quat, base_pos = self.base_align.align_transform(quat, base_pos)

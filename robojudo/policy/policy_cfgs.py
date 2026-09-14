@@ -275,6 +275,19 @@ class BeyondMimicPolicyCfg(PolicyCfg):
         return self
 
 
+class ParkourPolicyCfg(PolicyCfg):
+    """WBT Parkour policy driven by one external reference motion and terrain scan."""
+
+    policy_type: str = "ParkourPolicy"
+    disable_autoload: bool = True
+    policy_name: str
+    action_scales: list[float]
+    use_modelmeta_config: bool = True
+    observation_names: list[str]
+    observation_history_lengths: list[int]
+    command_source: str = "BeyondMimicCtrl"
+
+
 class AsapPolicyCfg(PolicyCfg):
     policy_type: str = "AsapPolicy"
     disable_autoload: bool = True
